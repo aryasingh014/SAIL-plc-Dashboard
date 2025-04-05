@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DashboardLayout from '@/components/layout/DashboardLayout';
@@ -17,7 +16,7 @@ const Settings = () => {
   const { toast } = useToast();
   
   // PLC Connection settings
-  const [plcIp, setPlcIp] = useState('192.168.1.100');
+  const [plcIp, setPlcIp] = useState('198.162.0.1');
   const [plcPort, setPlcPort] = useState('102');
   const [plcProtocol, setPlcProtocol] = useState('opcua');
   const [autoReconnect, setAutoReconnect] = useState(true);
@@ -59,6 +58,14 @@ const Settings = () => {
   }, [navigate, toast]);
 
   const handleSaveConnectionSettings = () => {
+    // Save PLC connection settings to localStorage
+    localStorage.setItem('plcSettings', JSON.stringify({
+      ip: plcIp,
+      port: plcPort,
+      protocol: plcProtocol,
+      autoReconnect
+    }));
+    
     toast({
       title: "Connection Settings Saved",
       description: "PLC connection settings have been updated.",

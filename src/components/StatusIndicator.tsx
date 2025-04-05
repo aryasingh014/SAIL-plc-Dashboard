@@ -2,7 +2,7 @@
 import React from 'react';
 import { cn } from '@/lib/utils';
 
-export type StatusType = 'normal' | 'warning' | 'alarm' | 'disconnected';
+export type StatusType = 'normal' | 'warning' | 'alarm' | 'disconnected' | 'connecting';
 
 interface StatusIndicatorProps {
   status: StatusType;
@@ -15,14 +15,16 @@ const statusClasses = {
   normal: 'bg-industrial-status-normal',
   warning: 'bg-industrial-status-warning',
   alarm: 'bg-industrial-status-alarm',
-  disconnected: 'bg-gray-400'
+  disconnected: 'bg-gray-400',
+  connecting: 'bg-blue-400'
 };
 
 const statusLabels = {
   normal: 'Normal',
   warning: 'Warning',
   alarm: 'Alarm',
-  disconnected: 'Disconnected'
+  disconnected: 'Disconnected',
+  connecting: 'Connecting'
 };
 
 const StatusIndicator: React.FC<StatusIndicatorProps> = ({ 

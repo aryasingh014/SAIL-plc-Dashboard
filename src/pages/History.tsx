@@ -194,7 +194,7 @@ const History = () => {
                     />
                     <YAxis />
                     <Tooltip 
-                      formatter={(value, name, props) => {
+                      formatter={(value, name: string) => {
                         // Check if this is a status field
                         if (name.endsWith('-status')) return null;
                         
@@ -212,10 +212,11 @@ const History = () => {
                               <p className="font-bold">{label}</p>
                               <div className="space-y-2 mt-2">
                                 {payload
-                                  .filter(p => !p.name.endsWith('-status')) // Filter out status fields
+                                  .filter(p => !p.name?.toString().endsWith('-status')) // Filter out status fields
                                   .map((entry, index) => {
                                     const parameter = parameters.find(p => p.name === entry.name);
-                                    const status = payload.find(p => p.name === `${entry.name}-status`)?.value;
+                                    const statusEntry = payload.find(p => p.name?.toString() === `${entry.name}-status`);
+                                    const status = statusEntry ? statusEntry.value : 'normal';
                                     
                                     // Status icon
                                     let StatusIcon = CheckCircle;

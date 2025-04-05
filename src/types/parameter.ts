@@ -1,5 +1,6 @@
 
 export type ParameterStatus = 'normal' | 'warning' | 'alarm';
+export type ConnectionStatus = 'normal' | 'warning' | 'alarm' | 'disconnected' | 'connecting';
 
 export interface Parameter {
   id: string;
@@ -43,4 +44,11 @@ export interface Alert {
   timestamp: string;
   acknowledged: boolean;
   notified: boolean;
+}
+
+export interface PLCConnectionSettings {
+  ip: string;
+  port: string;
+  protocol: 'opcua' | 'snap7' | 's7comm';
+  autoReconnect: boolean;
 }

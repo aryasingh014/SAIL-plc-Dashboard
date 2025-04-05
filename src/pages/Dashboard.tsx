@@ -1,13 +1,12 @@
-
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import StatusIndicator, { StatusType } from '@/components/StatusIndicator';
 import ParameterCard from '@/components/ParameterCard';
 import { getAllParameters, mockAlerts } from '@/data/mockData';
-import { Parameter } from '@/types/parameter';
-import { CheckCircle, AlertTriangle, AlertCircle, Database } from 'lucide-react';
+import { Parameter, PLCConnectionSettings } from '@/types/parameter';
+import { CheckCircle, AlertTriangle, AlertCircle, Database, RefreshCw } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/use-toast';
 
@@ -15,44 +14,69 @@ const Dashboard = () => {
   const [parameters, setParameters] = useState<Parameter[]>([]);
   const [selectedParameters, setSelectedParameters] = useState<string[]>([]);
   const [connectionStatus, setConnectionStatus] = useState<StatusType>('disconnected');
+  const [plcSettings, setPlcSettings] = useState<PLCConnectionSettings>({
+    ip: '198.162.0.1',
+    port: '102',
+    protocol: 'opcua',
+    autoReconnect: true
+  });
   const { toast } = useToast();
 
-  useEffect(() => {
-    // Simulate connection process
-    setConnectionStatus('disconnected');
+  const connectToPLC = useCallback(() => {
+    const savedSettings = localStorage.getItem('plcSettings');
+    if (savedSettings) {
+      setPlcSettings(JSON.parse(savedSettings));
+    }
+    
+    setConnectionStatus('connecting');
+    
+    toast({
+      title: "Connecting to PLC",
+      description: `Attempting to connect to PLC at ${plcSettings.ip}:${plcSettings.port} using ${plcSettings.protocol.toUpperCase()}...`,
+    });
     
     const connectionTimer = setTimeout(() => {
-      setConnectionStatus('normal');
+      const randomSuccess = Math.random() > 0.2;
       
-      // Load parameters
-      const allParams = getAllParameters();
-      setParameters(allParams);
-      
-      // By default, select first 4 parameters
-      setSelectedParameters(allParams.slice(0, 4).map(p => p.id));
-      
-      toast({
-        title: "Connected to PLC",
-        description: "Successfully established connection to the PLC device.",
-      });
-      
-    }, 2000);
+      if (randomSuccess) {
+        setConnectionStatus('normal');
+        
+        const allParams = getAllParameters();
+        setParameters(allParams);
+        
+        setSelectedParameters(allParams.slice(0, 4).map(p => p.id));
+        
+        toast({
+          title: "Connected to PLC",
+          description: `Successfully established connection to the PLC at ${plcSettings.ip}.`,
+        });
+      } else {
+        setConnectionStatus('disconnected');
+        
+        toast({
+          variant: "destructive",
+          title: "Connection Failed",
+          description: `Failed to connect to PLC at ${plcSettings.ip}. Please check connection settings.`,
+        });
+      }
+    }, 3000);
     
     return () => clearTimeout(connectionTimer);
-  }, [toast]);
+  }, [plcSettings, toast]);
+
+  useEffect(() => {
+    connectToPLC();
+  }, [connectToPLC]);
   
-  // Simulate parameters updating every 5 seconds
   useEffect(() => {
     if (connectionStatus !== 'normal') return;
     
     const updateInterval = setInterval(() => {
       setParameters(prev => 
         prev.map(parameter => {
-          // Random value change of up to ±5%
           const change = (Math.random() - 0.5) * 0.1;
           const newValue = parameter.value * (1 + change);
           
-          // Determine status based on thresholds
           let status: 'normal' | 'warning' | 'alarm' = 'normal';
           
           if (
@@ -80,9 +104,9 @@ const Dashboard = () => {
     return () => clearInterval(updateInterval);
   }, [connectionStatus]);
   
-  // Calculate overall system status
   const calculateSystemStatus = (): StatusType => {
     if (connectionStatus === 'disconnected') return 'disconnected';
+    if (connectionStatus === 'connecting') return 'connecting';
     
     if (parameters.some(p => p.status === 'alarm')) {
       return 'alarm';
@@ -109,19 +133,32 @@ const Dashboard = () => {
   const filteredParameters = parameters.filter(p => selectedParameters.includes(p.id));
   const unacknowledgedAlerts = mockAlerts.filter(alert => !alert.acknowledged).length;
 
+  const handleRefreshConnection = () => {
+    connectToPLC();
+  };
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-bold">Dashboard</h1>
-          <StatusIndicator 
-            status={systemStatus} 
-            label={`System Status: ${systemStatus.charAt(0).toUpperCase() + systemStatus.slice(1)}`}
-            size="lg"
-          />
+          <div className="flex items-center space-x-2">
+            <StatusIndicator 
+              status={systemStatus} 
+              label={`System Status: ${systemStatus.charAt(0).toUpperCase() + systemStatus.slice(1)}`}
+              size="lg"
+            />
+            <Button 
+              variant="outline" 
+              size="icon" 
+              onClick={handleRefreshConnection}
+              title="Refresh PLC Connection"
+            >
+              <RefreshCw className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
 
-        {/* Status cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between p-4 pb-2">
@@ -132,8 +169,12 @@ const Dashboard = () => {
               <div className="flex items-center space-x-2">
                 <StatusIndicator status={connectionStatus} />
                 <span className="text-2xl font-bold">
-                  {connectionStatus === 'normal' ? 'Online' : 'Connecting...'}
+                  {connectionStatus === 'normal' ? 'Online' : 
+                   connectionStatus === 'connecting' ? 'Connecting...' : 'Disconnected'}
                 </span>
+              </div>
+              <div className="mt-2 text-xs text-muted-foreground">
+                PLC IP: {plcSettings.ip}:{plcSettings.port} ({plcSettings.protocol.toUpperCase()})
               </div>
             </CardContent>
           </Card>
@@ -183,7 +224,6 @@ const Dashboard = () => {
           </Card>
         </div>
 
-        {/* Parameter selection */}
         <div className="bg-muted p-4 rounded-lg">
           <h2 className="text-lg font-medium mb-2">Selected Parameters</h2>
           <div className="flex flex-wrap gap-2">
@@ -201,7 +241,6 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* Parameter cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {filteredParameters.map(parameter => (
             <ParameterCard 
