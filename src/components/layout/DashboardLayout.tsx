@@ -36,6 +36,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const navigate = useNavigate();
   const isMobile = useIsMobile();
+  const [openMobile, setOpenMobile] = useState(false);
 
   useEffect(() => {
     // Get user from localStorage
@@ -63,7 +64,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
         {/* Mobile header */}
         <header className="border-b border-border py-3 px-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Drawer>
+            <Drawer open={openMobile} onOpenChange={setOpenMobile}>
               <DrawerTrigger asChild>
                 <Button variant="outline" size="icon">
                   <Menu className="h-5 w-5" />
@@ -92,32 +93,32 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
                   
                   <nav className="space-y-2">
                     <Link to="/dashboard">
-                      <Button variant="ghost" className="w-full justify-start">
+                      <Button variant="ghost" className="w-full justify-start" onClick={() => setOpenMobile(false)}>
                         <LayoutDashboard className="mr-2 h-4 w-4" />
                         Dashboard
                       </Button>
                     </Link>
                     <Link to="/parameters">
-                      <Button variant="ghost" className="w-full justify-start">
+                      <Button variant="ghost" className="w-full justify-start" onClick={() => setOpenMobile(false)}>
                         <BarChart3 className="mr-2 h-4 w-4" />
                         Parameters
                       </Button>
                     </Link>
                     <Link to="/history">
-                      <Button variant="ghost" className="w-full justify-start">
+                      <Button variant="ghost" className="w-full justify-start" onClick={() => setOpenMobile(false)}>
                         <History className="mr-2 h-4 w-4" />
                         History
                       </Button>
                     </Link>
                     <Link to="/alerts">
-                      <Button variant="ghost" className="w-full justify-start">
+                      <Button variant="ghost" className="w-full justify-start" onClick={() => setOpenMobile(false)}>
                         <Bell className="mr-2 h-4 w-4" />
                         Alerts
                       </Button>
                     </Link>
                     {user.role === 'admin' && (
                       <Link to="/settings">
-                        <Button variant="ghost" className="w-full justify-start">
+                        <Button variant="ghost" className="w-full justify-start" onClick={() => setOpenMobile(false)}>
                           <Settings className="mr-2 h-4 w-4" />
                           Settings
                         </Button>
