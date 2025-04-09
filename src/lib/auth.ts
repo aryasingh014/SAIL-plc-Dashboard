@@ -62,8 +62,14 @@ export const useAuth = () => {
       if (error) {
         console.error('Error fetching profile:', error);
         setProfile(null);
-      } else {
-        setProfile(data);
+      } else if (data) {
+        // Ensure role is of the correct type
+        const role = data.role as 'admin' | 'operator';
+        setProfile({
+          id: data.id,
+          username: data.username,
+          role: role
+        });
       }
     } catch (error) {
       console.error('Error fetching profile:', error);
