@@ -1,5 +1,5 @@
 
-import React, { ReactNode, useEffect, useState } from 'react';
+import React, { ReactNode } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -21,41 +21,22 @@ import {
 } from "@/components/ui/sidebar";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { DrawerContent, Drawer, DrawerTrigger } from "@/components/ui/drawer";
-
-type User = {
-  username: string;
-  role: string;
-  isAuthenticated: boolean;
-};
+import { useAuthContext } from '@/context/AuthContext';
 
 interface DashboardLayoutProps {
   children: ReactNode;
 }
 
 const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
+  const { profile, signOut, isAdmin } = useAuthContext();
   const navigate = useNavigate();
   const isMobile = useIsMobile();
-  const [openMobile, setOpenMobile] = useState(false);
+  const [openMobile, setOpenMobile] = React.useState(false);
 
-  useEffect(() => {
-    // Get user from localStorage
-    const storedUser = localStorage.getItem('user');
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
-    } else {
-      navigate('/login');
-    }
-  }, [navigate]);
-
-  const handleLogout = () => {
-    localStorage.removeItem('user');
+  const handleLogout = async () => {
+    await signOut();
     navigate('/login');
   };
-
-  if (!user) {
-    return <div>Loading...</div>;
-  }
 
   // For mobile view, we use a drawer for navigation
   if (isMobile) {
@@ -80,11 +61,11 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
                   <div className="p-4 bg-industrial-blue-light/20 rounded-lg mb-4">
                     <div className="flex items-center space-x-2">
                       <div className="h-8 w-8 rounded-full bg-industrial-blue flex items-center justify-center text-white">
-                        {user.username.charAt(0).toUpperCase()}
+                        {profile?.username ? profile.username.charAt(0).toUpperCase() : '?'}
                       </div>
                       <div>
-                        <p className="text-sm font-medium">{user.username}</p>
-                        <p className="text-xs opacity-70 capitalize">{user.role}</p>
+                        <p className="text-sm font-medium">{profile?.username || 'User'}</p>
+                        <p className="text-xs opacity-70 capitalize">{profile?.role || 'operator'}</p>
                       </div>
                     </div>
                   </div>
@@ -116,7 +97,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
                         Alerts
                       </Button>
                     </Link>
-                    {user.role === 'admin' && (
+                    {isAdmin && (
                       <Link to="/settings">
                         <Button variant="ghost" className="w-full justify-start" onClick={() => setOpenMobile(false)}>
                           <Settings className="mr-2 h-4 w-4" />
@@ -161,11 +142,11 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
             <div className="p-2 bg-sidebar-accent/20 rounded-md">
               <div className="flex items-center space-x-2">
                 <div className="h-7 w-7 rounded-full bg-sidebar-accent/20 flex items-center justify-center">
-                  {user.username.charAt(0).toUpperCase()}
+                  {profile?.username ? profile.username.charAt(0).toUpperCase() : '?'}
                 </div>
                 <div>
-                  <p className="text-sm font-medium">{user.username}</p>
-                  <p className="text-xs opacity-70 capitalize">{user.role}</p>
+                  <p className="text-sm font-medium">{profile?.username || 'User'}</p>
+                  <p className="text-xs opacity-70 capitalize">{profile?.role || 'operator'}</p>
                 </div>
               </div>
             </div>
@@ -205,7 +186,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
-              {user.role === 'admin' && (
+              {isAdmin && (
                 <SidebarMenuItem>
                   <SidebarMenuButton asChild tooltip="Settings">
                     <Link to="/settings">

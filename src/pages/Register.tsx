@@ -1,16 +1,14 @@
 
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/use-toast";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { Link } from "react-router-dom";
 import { useAuthContext } from '@/context/AuthContext';
 
 // Define form validation schema
@@ -21,15 +19,21 @@ const formSchema = z.object({
   password: z.string().min(6, {
     message: "Password must be at least 6 characters.",
   }),
+  confirmPassword: z.string().min(6, {
+    message: "Password must be at least 6 characters.",
+  }),
+}).refine((data) => data.password === data.confirmPassword, {
+  message: "Passwords do not match",
+  path: ["confirmPassword"],
 });
 
 type FormValues = z.infer<typeof formSchema>;
 
-const Login = () => {
+const Register = () => {
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
-  const { signIn, isAuthenticated } = useAuthContext();
+  const { signUp, isAuthenticated } = useAuthContext();
 
   // Initialize form with validation
   const form = useForm<FormValues>({
@@ -37,6 +41,7 @@ const Login = () => {
     defaultValues: {
       email: "",
       password: "",
+      confirmPassword: ""
     },
   });
 
@@ -51,25 +56,25 @@ const Login = () => {
     setIsLoading(true);
     
     try {
-      const { error } = await signIn(values.email, values.password);
+      const { error } = await signUp(values.email, values.password);
       
       if (error) {
         toast({
           variant: "destructive",
-          title: "Login Failed",
-          description: error.message || "Please check your credentials and try again.",
+          title: "Registration Failed",
+          description: error.message || "Please try again with a different email.",
         });
       } else {
         toast({
-          title: "Login Successful",
-          description: "Welcome back!",
+          title: "Registration Successful",
+          description: "Please check your email to confirm your account.",
         });
-        navigate('/dashboard');
+        navigate('/login');
       }
     } catch (error: any) {
       toast({
         variant: "destructive",
-        title: "Login Failed",
+        title: "Registration Failed",
         description: error.message || "An unexpected error occurred. Please try again.",
       });
     } finally {
@@ -81,8 +86,8 @@ const Login = () => {
     <div className="h-screen w-full flex items-center justify-center bg-gradient-to-br from-blue-900 to-blue-700">
       <Card className="w-[400px] shadow-xl">
         <CardHeader className="space-y-1 text-center">
-          <CardTitle className="text-2xl font-bold">Nexus PLC Visualizer</CardTitle>
-          <CardDescription>Login to access the dashboard</CardDescription>
+          <CardTitle className="text-2xl font-bold">Create an Account</CardTitle>
+          <CardDescription>Register to access the Nexus PLC Visualizer</CardDescription>
         </CardHeader>
         <CardContent>
           <Form {...form}>
@@ -113,17 +118,30 @@ const Login = () => {
                   </FormItem>
                 )}
               />
+              <FormField
+                control={form.control}
+                name="confirmPassword"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Confirm Password</FormLabel>
+                    <FormControl>
+                      <Input type="password" placeholder="••••••••" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
               
               <Button 
                 type="submit" 
                 className="w-full bg-industrial-blue hover:bg-industrial-blue-light" 
                 disabled={isLoading}
               >
-                {isLoading ? 'Signing in...' : 'Sign in'}
+                {isLoading ? 'Registering...' : 'Register'}
               </Button>
               
               <div className="text-center text-sm">
-                Don't have an account? <Link to="/register" className="text-blue-500 hover:underline">Register</Link>
+                Already have an account? <Link to="/login" className="text-blue-500 hover:underline">Login</Link>
               </div>
             </form>
           </Form>
@@ -133,4 +151,4 @@ const Login = () => {
   );
 };
 
-export default Login;
+export default Register;

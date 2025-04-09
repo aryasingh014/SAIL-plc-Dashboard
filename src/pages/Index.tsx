@@ -3,18 +3,19 @@ import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useAuthContext } from '@/context/AuthContext';
 
 const Index = () => {
   const navigate = useNavigate();
+  const { isAuthenticated } = useAuthContext();
 
   useEffect(() => {
     // Check if the user is already logged in
-    const user = localStorage.getItem('user');
-    if (user && JSON.parse(user).isAuthenticated) {
+    if (isAuthenticated) {
       // Redirect to dashboard if already logged in
       navigate('/dashboard');
     }
-  }, [navigate]);
+  }, [isAuthenticated, navigate]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-900 to-blue-700">
@@ -33,11 +34,9 @@ const Index = () => {
             <Button className="w-full bg-industrial-blue hover:bg-industrial-blue-light" onClick={() => navigate('/login')}>
               Sign in
             </Button>
-          </div>
-          <div className="text-sm text-muted-foreground pt-4">
-            <p>Demo credentials:</p>
-            <p>Username: admin or operator (any text)</p>
-            <p>Password: any text</p>
+            <Button className="w-full" variant="outline" onClick={() => navigate('/register')}>
+              Create account
+            </Button>
           </div>
         </CardContent>
       </Card>
