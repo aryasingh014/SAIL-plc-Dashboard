@@ -11,6 +11,7 @@ export interface ParameterData {
   min_value: number | null;
   max_value: number | null;
   status?: string;
+  user_id?: string; // Adding user_id field to match expected structure
 }
 
 export async function fetchParameters() {
@@ -34,9 +35,15 @@ export async function fetchParameters() {
 
 export async function createParameter(parameter: ParameterData) {
   try {
+    // Add user_id if not present
+    if (!parameter.user_id) {
+      const { data: { user } } = await supabase.auth.getUser();
+      parameter.user_id = user?.id;
+    }
+
     const { data, error } = await supabase
       .from('parameters')
-      .insert([parameter])
+      .insert(parameter) // Now passing a single object instead of an array
       .select();
     
     if (error) {

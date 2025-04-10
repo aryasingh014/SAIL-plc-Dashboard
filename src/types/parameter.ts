@@ -1,6 +1,6 @@
 
 export type ParameterStatus = 'normal' | 'warning' | 'alarm';
-export type ConnectionStatus = 'normal' | 'warning' | 'alarm' | 'disconnected' | 'connecting';
+export type StatusType = 'normal' | 'warning' | 'alarm' | 'disconnected' | 'connecting';
 
 export interface Parameter {
   id: string;
