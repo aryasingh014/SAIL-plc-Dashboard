@@ -33,7 +33,7 @@ const App = () => {
               <Route path="/dashboard" element={<ProtectedRoute element={<Dashboard />} />} />
               <Route path="/parameters" element={<ProtectedRoute element={<Parameters />} />} />
               <Route path="/history" element={<ProtectedRoute element={<History />} />} />
-              <Route path="/alerts" element={<ProtectedRoute element={<ProtectedRoute element={<Alerts />} />} />} />
+              <Route path="/alerts" element={<ProtectedRoute element={<Parameters />} />} />
               <Route path="/settings" element={<ProtectedRoute element={<Settings />} adminOnly />} />
               
               <Route path="*" element={<NotFound />} />
@@ -45,7 +45,7 @@ const App = () => {
   );
 };
 
-// New protected route component that uses the auth context
+// Protected route component that uses the auth context
 const ProtectedRoute = ({ 
   element, 
   adminOnly = false 

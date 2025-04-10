@@ -20,6 +20,7 @@ export const useAuth = () => {
     // Set up auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, newSession) => {
+        console.log('Auth state changed:', event, newSession?.user?.id);
         setSession(newSession);
         setUser(newSession?.user ?? null);
         
@@ -36,6 +37,7 @@ export const useAuth = () => {
 
     // THEN check for existing session
     supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
+      console.log('Initial session check:', initialSession?.user?.id);
       setSession(initialSession);
       setUser(initialSession?.user ?? null);
       
@@ -53,6 +55,7 @@ export const useAuth = () => {
 
   const fetchProfile = async (userId: string) => {
     try {
+      console.log('Fetching profile for userId:', userId);
       const { data, error } = await supabase
         .from('profiles')
         .select('id, username, role')
@@ -63,6 +66,7 @@ export const useAuth = () => {
         console.error('Error fetching profile:', error);
         setProfile(null);
       } else if (data) {
+        console.log('Profile data received:', data);
         // Ensure role is of the correct type
         const role = data.role as 'admin' | 'operator';
         setProfile({
@@ -70,6 +74,7 @@ export const useAuth = () => {
           username: data.username,
           role: role
         });
+        console.log('Setting profile with role:', role);
       }
     } catch (error) {
       console.error('Error fetching profile:', error);
