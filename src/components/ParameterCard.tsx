@@ -1,8 +1,8 @@
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import StatusIndicator from './StatusIndicator';
-import { Parameter } from '@/types/parameter';
+import { Parameter, ParameterHistoryEntry } from '@/types/parameter';
 import { LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip } from 'recharts';
 import { cn } from '@/lib/utils';
 import { getMockParameterHistory } from '@/data/mockData';
@@ -18,9 +18,29 @@ const ParameterCard: React.FC<ParameterCardProps> = ({
   className,
   showGraph = true
 }) => {
-  const history = getMockParameterHistory(parameter.id);
-  // Take the latest 20 entries for the mini chart
-  const chartData = history.data.slice(-20);
+  const [chartData, setChartData] = useState<ParameterHistoryEntry[]>([]);
+
+  useEffect(() => {
+    const history = getMockParameterHistory(parameter.id);
+    // Take the latest 20 entries for the mini chart
+    setChartData(history.data.slice(-20));
+  }, [parameter.id]);
+
+  // When parameter value changes, add a new data point
+  useEffect(() => {
+    setChartData(prev => {
+      const newData = [...prev];
+      if (newData.length >= 20) {
+        newData.shift(); // Remove the oldest data point
+      }
+      newData.push({
+        timestamp: parameter.timestamp,
+        value: parameter.value,
+        status: parameter.status
+      });
+      return newData;
+    });
+  }, [parameter.value, parameter.timestamp, parameter.status]);
 
   return (
     <Card className={cn("overflow-hidden", className)}>
@@ -41,7 +61,7 @@ const ParameterCard: React.FC<ParameterCardProps> = ({
           </div>
         </div>
         
-        {showGraph && (
+        {showGraph && chartData.length > 0 && (
           <div className="h-24 mt-2">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={chartData}>
@@ -77,11 +97,19 @@ const ParameterCard: React.FC<ParameterCardProps> = ({
         <div className="grid grid-cols-2 gap-2 mt-2 text-xs">
           <div>
             <p className="text-muted-foreground">Warning Range:</p>
-            <p>{parameter.thresholds.warning.min} - {parameter.thresholds.warning.max} {parameter.unit}</p>
+            <p>
+              {parameter.thresholds.warning.min !== null ? parameter.thresholds.warning.min : '-'} - 
+              {parameter.thresholds.warning.max !== null ? parameter.thresholds.warning.max : '-'} 
+              {parameter.unit}
+            </p>
           </div>
           <div>
             <p className="text-muted-foreground">Alarm Range:</p>
-            <p>{parameter.thresholds.alarm.min} - {parameter.thresholds.alarm.max} {parameter.unit}</p>
+            <p>
+              {parameter.thresholds.alarm.min !== null ? parameter.thresholds.alarm.min : '-'} - 
+              {parameter.thresholds.alarm.max !== null ? parameter.thresholds.alarm.max : '-'} 
+              {parameter.unit}
+            </p>
           </div>
         </div>
       </CardContent>

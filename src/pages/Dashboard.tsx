@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Button } from "@/components/ui/button";
@@ -9,6 +10,7 @@ import { Parameter, PLCConnectionSettings } from '@/types/parameter';
 import { CheckCircle, AlertTriangle, AlertCircle, Database, RefreshCw } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 
 const Dashboard = () => {
   const [parameters, setParameters] = useState<Parameter[]>([]);
@@ -35,16 +37,13 @@ const Dashboard = () => {
       description: `Attempting to connect to PLC at ${plcSettings.ip}:${plcSettings.port} using ${plcSettings.protocol.toUpperCase()}...`,
     });
     
+    // Simulate connection
     const connectionTimer = setTimeout(() => {
       const randomSuccess = Math.random() > 0.2;
       
       if (randomSuccess) {
         setConnectionStatus('normal');
-        
-        const allParams = getAllParameters();
-        setParameters(allParams);
-        
-        setSelectedParameters(allParams.slice(0, 4).map(p => p.id));
+        fetchParameters();
         
         toast({
           title: "Connected to PLC",
@@ -63,6 +62,64 @@ const Dashboard = () => {
     
     return () => clearTimeout(connectionTimer);
   }, [plcSettings, toast]);
+
+  const fetchParameters = async () => {
+    try {
+      // First try to fetch real parameters from Supabase
+      const { data: supabaseParams, error } = await supabase
+        .from('parameters')
+        .select('*');
+      
+      console.log('Fetched parameters:', supabaseParams);
+      
+      if (error) {
+        console.error('Error fetching parameters from Supabase:', error);
+        // Fallback to mock data if there's an error
+        const mockParams = getAllParameters();
+        setParameters(mockParams);
+        setSelectedParameters(mockParams.slice(0, 4).map(p => p.id));
+        return;
+      }
+      
+      if (supabaseParams && supabaseParams.length > 0) {
+        // Transform Supabase data to match Parameter type
+        const formattedParams: Parameter[] = supabaseParams.map(p => ({
+          id: p.id,
+          name: p.name,
+          description: `${p.name} parameter`,
+          unit: p.unit || '',
+          value: p.value,
+          status: p.status || 'normal',
+          thresholds: {
+            warning: {
+              min: p.min_value || null,
+              max: p.max_value || null
+            },
+            alarm: {
+              min: p.min_value ? p.min_value * 0.9 : null,
+              max: p.max_value ? p.max_value * 1.1 : null
+            }
+          },
+          timestamp: p.updated_at || new Date().toISOString(),
+          category: 'Custom'
+        }));
+        
+        setParameters(formattedParams);
+        setSelectedParameters(formattedParams.map(p => p.id));
+      } else {
+        // Fallback to mock data if no parameters found
+        const mockParams = getAllParameters();
+        setParameters(mockParams);
+        setSelectedParameters(mockParams.slice(0, 4).map(p => p.id));
+      }
+    } catch (error) {
+      console.error('Error in fetchParameters:', error);
+      // Fallback to mock data on any error
+      const mockParams = getAllParameters();
+      setParameters(mockParams);
+      setSelectedParameters(mockParams.slice(0, 4).map(p => p.id));
+    }
+  };
 
   useEffect(() => {
     connectToPLC();
