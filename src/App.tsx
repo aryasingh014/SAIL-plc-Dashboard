@@ -33,7 +33,7 @@ const App = () => {
               <Route path="/dashboard" element={<ProtectedRoute element={<Dashboard />} />} />
               <Route path="/parameters" element={<ProtectedRoute element={<Parameters />} />} />
               <Route path="/history" element={<ProtectedRoute element={<History />} />} />
-              <Route path="/alerts" element={<ProtectedRoute element={<Parameters />} />} />
+              <Route path="/alerts" element={<ProtectedRoute element={<Alerts />} />} />
               <Route path="/settings" element={<ProtectedRoute element={<Settings />} adminOnly />} />
               
               <Route path="*" element={<NotFound />} />

@@ -35,8 +35,8 @@ const Login = () => {
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      email: "",
-      password: "",
+      email: "aryasingh14600@gmail.com",
+      password: "Arya@123",
     },
   });
 
@@ -51,9 +51,11 @@ const Login = () => {
     setIsLoading(true);
     
     try {
+      console.log('Submitting login with:', values.email);
       const { error } = await signIn(values.email, values.password);
       
       if (error) {
+        console.error('Login error:', error.message);
         toast({
           variant: "destructive",
           title: "Login Failed",
@@ -67,6 +69,7 @@ const Login = () => {
         navigate('/dashboard');
       }
     } catch (error: any) {
+      console.error('Login exception:', error.message);
       toast({
         variant: "destructive",
         title: "Login Failed",

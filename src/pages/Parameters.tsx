@@ -1,297 +1,229 @@
 
 import React, { useState, useEffect } from 'react';
+import { useToast } from '@/components/ui/use-toast';
 import DashboardLayout from '@/components/layout/DashboardLayout';
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import StatusIndicator from '@/components/StatusIndicator';
-import { getAllParameters } from '@/data/mockData';
-import { Parameter } from '@/types/parameter';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Search, Plus, Edit, Trash2 } from 'lucide-react';
-import { useToast } from '@/components/ui/use-toast';
-import { supabase } from '@/integrations/supabase/client';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Pencil, Trash2, Plus } from 'lucide-react';
 import { useAuthContext } from '@/context/AuthContext';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { supabase } from '@/integrations/supabase/client';
 
 const Parameters = () => {
-  const [parameters, setParameters] = useState<Parameter[]>([]);
-  const [filteredParameters, setFilteredParameters] = useState<Parameter[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [currentParameter, setCurrentParameter] = useState<Parameter | null>(null);
-  const [newParameter, setNewParameter] = useState({
-    name: '',
-    description: '',
-    category: '',
-    unit: '',
-    value: 0,
-    thresholds: {
-      warning: { min: 0, max: 0 },
-      alarm: { min: 0, max: 0 }
-    }
-  });
   const { toast } = useToast();
-  const { user, isAdmin } = useAuthContext();
+  const { user } = useAuthContext();
+  const [parameters, setParameters] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [currentParameter, setCurrentParameter] = useState(null);
+  
+  // Form state
+  const [formData, setFormData] = useState({
+    name: '',
+    value: '',
+    unit: '',
+    min_value: '',
+    max_value: '',
+    status: 'normal'
+  });
 
+  // Fetch parameters on component mount
   useEffect(() => {
-    // Load parameters
-    loadParameters();
+    fetchParameters();
   }, []);
 
-  const loadParameters = async () => {
+  const fetchParameters = async () => {
     try {
-      // First try to load from Supabase
-      if (user) {
-        const { data, error } = await supabase
-          .from('parameters')
-          .select('*')
-          .eq('user_id', user.id);
-          
-        if (error) {
-          console.error('Error loading parameters from Supabase:', error);
-          // Fallback to mock data
-          const allParams = getAllParameters();
-          setParameters(allParams);
-          setFilteredParameters(allParams);
-        } else if (data && data.length > 0) {
-          // Transform Supabase data to match our Parameter type
-          const transformedParams: Parameter[] = data.map(param => ({
-            id: param.id,
-            name: param.name,
-            description: param.description || '',
-            category: param.category || 'General',
-            unit: param.unit || '',
-            value: param.value,
-            status: param.status as 'normal' | 'warning' | 'alarm' || 'normal',
-            thresholds: {
-              warning: {
-                min: param.warning_min || null,
-                max: param.warning_max || null
-              },
-              alarm: {
-                min: param.alarm_min || null,
-                max: param.alarm_max || null
-              }
-            },
-            timestamp: param.updated_at || new Date().toISOString()
-          }));
-          
-          setParameters(transformedParams);
-          setFilteredParameters(transformedParams);
-        } else {
-          // No data in Supabase, use mock data
-          const allParams = getAllParameters();
-          setParameters(allParams);
-          setFilteredParameters(allParams);
-        }
-      } else {
-        // Not logged in, use mock data
-        const allParams = getAllParameters();
-        setParameters(allParams);
-        setFilteredParameters(allParams);
-      }
-    } catch (error) {
-      console.error('Error loading parameters:', error);
-      // Fallback to mock data
-      const allParams = getAllParameters();
-      setParameters(allParams);
-      setFilteredParameters(allParams);
-    }
-  };
-
-  useEffect(() => {
-    // Filter parameters based on search query
-    if (searchQuery.trim() === '') {
-      setFilteredParameters(parameters);
-    } else {
-      const query = searchQuery.toLowerCase();
-      setFilteredParameters(
-        parameters.filter(
-          p => 
-            p.name.toLowerCase().includes(query) || 
-            p.description.toLowerCase().includes(query) ||
-            p.category.toLowerCase().includes(query)
-        )
-      );
-    }
-  }, [searchQuery, parameters]);
-
-  const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setSearchQuery(e.target.value);
-  };
-
-  const handleAddParameter = () => {
-    setIsAddModalOpen(true);
-  };
-
-  const handleSaveNewParameter = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!user) {
-      toast({
-        title: "Authentication Required",
-        description: "You must be logged in to add parameters.",
-        variant: "destructive"
-      });
-      return;
-    }
-    
-    try {
-      // Calculate status based on thresholds and value
-      let status: 'normal' | 'warning' | 'alarm' = 'normal';
-      const value = Number(newParameter.value);
-      
-      if (newParameter.thresholds.alarm.min !== null && value < newParameter.thresholds.alarm.min ||
-          newParameter.thresholds.alarm.max !== null && value > newParameter.thresholds.alarm.max) {
-        status = 'alarm';
-      } else if (newParameter.thresholds.warning.min !== null && value < newParameter.thresholds.warning.min ||
-                 newParameter.thresholds.warning.max !== null && value > newParameter.thresholds.warning.max) {
-        status = 'warning';
-      }
-      
-      // Save to Supabase
+      setLoading(true);
       const { data, error } = await supabase
         .from('parameters')
-        .insert({
-          name: newParameter.name,
-          description: newParameter.description,
-          category: newParameter.category,
-          unit: newParameter.unit,
-          value: newParameter.value,
-          status: status,
-          warning_min: newParameter.thresholds.warning.min,
-          warning_max: newParameter.thresholds.warning.max,
-          alarm_min: newParameter.thresholds.alarm.min,
-          alarm_max: newParameter.thresholds.alarm.max,
-          user_id: user.id
-        })
+        .select('*')
+        .order('name');
+      
+      if (error) {
+        throw error;
+      }
+      
+      setParameters(data || []);
+      console.log('Fetched parameters:', data);
+    } catch (error) {
+      console.error('Error fetching parameters:', error);
+      toast({
+        variant: "destructive",
+        title: "Failed to load parameters",
+        description: error.message,
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setFormData({
+      ...formData,
+      [name]: value
+    });
+  };
+
+  const resetForm = () => {
+    setFormData({
+      name: '',
+      value: '',
+      unit: '',
+      min_value: '',
+      max_value: '',
+      status: 'normal'
+    });
+  };
+
+  const handleAddParameter = async () => {
+    try {
+      // Validate input
+      if (!formData.name || !formData.value) {
+        toast({
+          variant: "destructive",
+          title: "Validation Error",
+          description: "Name and value are required fields",
+        });
+        return;
+      }
+
+      const newParameter = {
+        name: formData.name,
+        value: parseFloat(formData.value),
+        unit: formData.unit,
+        min_value: formData.min_value ? parseFloat(formData.min_value) : null,
+        max_value: formData.max_value ? parseFloat(formData.max_value) : null,
+        status: formData.status,
+        user_id: user.id
+      };
+
+      const { data, error } = await supabase
+        .from('parameters')
+        .insert(newParameter)
         .select();
-      
-      if (error) throw error;
-      
+
+      if (error) {
+        throw error;
+      }
+
       toast({
         title: "Parameter Added",
-        description: `${newParameter.name} has been added successfully.`,
+        description: `${formData.name} has been successfully added`,
       });
-      
-      // Reset form and close modal
-      setNewParameter({
-        name: '',
-        description: '',
-        category: '',
-        unit: '',
-        value: 0,
-        thresholds: {
-          warning: { min: 0, max: 0 },
-          alarm: { min: 0, max: 0 }
-        }
-      });
-      setIsAddModalOpen(false);
-      
-      // Reload parameters
-      loadParameters();
-      
-    } catch (error: any) {
+
+      // Refresh parameters list
+      fetchParameters();
+      resetForm();
+      setIsAddDialogOpen(false);
+    } catch (error) {
       console.error('Error adding parameter:', error);
       toast({
-        title: "Error Adding Parameter",
-        description: error.message || "An unexpected error occurred.",
-        variant: "destructive"
+        variant: "destructive",
+        title: "Failed to add parameter",
+        description: error.message,
       });
     }
   };
 
-  const handleEditParameter = (parameter: Parameter) => {
+  const handleEditClick = (parameter) => {
     setCurrentParameter(parameter);
-    setIsEditModalOpen(true);
+    setFormData({
+      name: parameter.name,
+      value: parameter.value.toString(),
+      unit: parameter.unit || '',
+      min_value: parameter.min_value ? parameter.min_value.toString() : '',
+      max_value: parameter.max_value ? parameter.max_value.toString() : '',
+      status: parameter.status || 'normal'
+    });
+    setIsEditDialogOpen(true);
   };
 
-  const handleDeleteParameter = async (parameterId: string) => {
+  const handleUpdateParameter = async () => {
     try {
-      // Delete from Supabase if user is logged in
-      if (user) {
-        const { error } = await supabase
-          .from('parameters')
-          .delete()
-          .eq('id', parameterId)
-          .eq('user_id', user.id);
-          
-        if (error) throw error;
-      }
-      
-      // Update local state
-      setParameters(prev => prev.filter(p => p.id !== parameterId));
-      
-      toast({
-        title: "Parameter Deleted",
-        description: "Parameter has been removed successfully.",
-      });
-    } catch (error: any) {
-      console.error('Error deleting parameter:', error);
-      toast({
-        title: "Error Deleting Parameter",
-        description: error.message || "An unexpected error occurred while deleting.",
-        variant: "destructive"
-      });
-    }
-  };
+      if (!currentParameter) return;
 
-  const handleSaveThresholds = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!currentParameter || !user) return;
-    
-    try {
-      // Calculate new status based on thresholds and value
-      let status: 'normal' | 'warning' | 'alarm' = 'normal';
-      const value = Number(currentParameter.value);
-      
-      if (currentParameter.thresholds.alarm.min !== null && value < currentParameter.thresholds.alarm.min ||
-          currentParameter.thresholds.alarm.max !== null && value > currentParameter.thresholds.alarm.max) {
-        status = 'alarm';
-      } else if (currentParameter.thresholds.warning.min !== null && value < currentParameter.thresholds.warning.min ||
-                 currentParameter.thresholds.warning.max !== null && value > currentParameter.thresholds.warning.max) {
-        status = 'warning';
-      }
-      
-      // Update in Supabase
+      const updatedParameter = {
+        name: formData.name,
+        value: parseFloat(formData.value),
+        unit: formData.unit,
+        min_value: formData.min_value ? parseFloat(formData.min_value) : null,
+        max_value: formData.max_value ? parseFloat(formData.max_value) : null,
+        status: formData.status
+      };
+
       const { error } = await supabase
         .from('parameters')
-        .update({
-          warning_min: currentParameter.thresholds.warning.min,
-          warning_max: currentParameter.thresholds.warning.max,
-          alarm_min: currentParameter.thresholds.alarm.min,
-          alarm_max: currentParameter.thresholds.alarm.max,
-          status: status
-        })
-        .eq('id', currentParameter.id)
-        .eq('user_id', user.id);
-        
-      if (error) throw error;
-      
-      // Update the parameter in the state
-      setParameters(prev => 
-        prev.map(p => 
-          p.id === currentParameter.id ? { ...currentParameter, status } : p
-        )
-      );
-      
-      setIsEditModalOpen(false);
-      
+        .update(updatedParameter)
+        .eq('id', currentParameter.id);
+
+      if (error) {
+        throw error;
+      }
+
       toast({
-        title: "Thresholds Updated",
-        description: `Threshold changes for ${currentParameter.name} have been saved.`,
+        title: "Parameter Updated",
+        description: `${formData.name} has been successfully updated`,
       });
-    } catch (error: any) {
-      console.error('Error updating thresholds:', error);
+
+      fetchParameters();
+      resetForm();
+      setIsEditDialogOpen(false);
+    } catch (error) {
+      console.error('Error updating parameter:', error);
       toast({
-        title: "Error Updating Thresholds",
-        description: error.message || "An unexpected error occurred.",
-        variant: "destructive"
+        variant: "destructive",
+        title: "Failed to update parameter",
+        description: error.message,
+      });
+    }
+  };
+
+  const handleDeleteParameter = async (id, name) => {
+    if (!confirm(`Are you sure you want to delete ${name}?`)) return;
+
+    try {
+      const { error } = await supabase
+        .from('parameters')
+        .delete()
+        .eq('id', id);
+
+      if (error) {
+        throw error;
+      }
+
+      toast({
+        title: "Parameter Deleted",
+        description: `${name} has been successfully deleted`,
+      });
+
+      fetchParameters();
+    } catch (error) {
+      console.error('Error deleting parameter:', error);
+      toast({
+        variant: "destructive",
+        title: "Failed to delete parameter",
+        description: error.message,
       });
     }
   };
@@ -300,348 +232,255 @@ const Parameters = () => {
     <DashboardLayout>
       <div className="space-y-6">
         <div className="flex justify-between items-center">
-          <h1 className="text-2xl font-bold">Parameters</h1>
-          <Button onClick={handleAddParameter}>
-            <Plus className="mr-2 h-4 w-4" />
-            Add Parameter
-          </Button>
-        </div>
-
-        {/* Search and filters */}
-        <div className="flex items-center space-x-2">
-          <div className="relative flex-1">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input 
-              type="text" 
-              placeholder="Search parameters..." 
-              className="pl-8"
-              value={searchQuery}
-              onChange={handleSearch}
-            />
+          <div>
+            <h1 className="text-2xl font-bold">PLC Parameters</h1>
+            <p className="text-muted-foreground">
+              View and manage all PLC parameters in the system
+            </p>
           </div>
+          <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="mr-2 h-4 w-4" />
+                Add Parameter
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Add New Parameter</DialogTitle>
+                <DialogDescription>
+                  Create a new PLC parameter to monitor
+                </DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="name" className="text-right">
+                    Name
+                  </Label>
+                  <Input
+                    id="name"
+                    name="name"
+                    placeholder="Temperature"
+                    className="col-span-3"
+                    value={formData.name}
+                    onChange={handleInputChange}
+                  />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="value" className="text-right">
+                    Value
+                  </Label>
+                  <Input
+                    id="value"
+                    name="value"
+                    type="number"
+                    placeholder="25.5"
+                    className="col-span-3"
+                    value={formData.value}
+                    onChange={handleInputChange}
+                  />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="unit" className="text-right">
+                    Unit
+                  </Label>
+                  <Input
+                    id="unit"
+                    name="unit"
+                    placeholder="°C"
+                    className="col-span-3"
+                    value={formData.unit}
+                    onChange={handleInputChange}
+                  />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="min_value" className="text-right">
+                    Min Value
+                  </Label>
+                  <Input
+                    id="min_value"
+                    name="min_value"
+                    type="number"
+                    placeholder="0"
+                    className="col-span-3"
+                    value={formData.min_value}
+                    onChange={handleInputChange}
+                  />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="max_value" className="text-right">
+                    Max Value
+                  </Label>
+                  <Input
+                    id="max_value"
+                    name="max_value"
+                    type="number"
+                    placeholder="100"
+                    className="col-span-3"
+                    value={formData.max_value}
+                    onChange={handleInputChange}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button type="submit" onClick={handleAddParameter}>
+                  Add Parameter
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Edit Parameter</DialogTitle>
+                <DialogDescription>
+                  Update the details of an existing parameter
+                </DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="edit-name" className="text-right">
+                    Name
+                  </Label>
+                  <Input
+                    id="edit-name"
+                    name="name"
+                    className="col-span-3"
+                    value={formData.name}
+                    onChange={handleInputChange}
+                  />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="edit-value" className="text-right">
+                    Value
+                  </Label>
+                  <Input
+                    id="edit-value"
+                    name="value"
+                    type="number"
+                    className="col-span-3"
+                    value={formData.value}
+                    onChange={handleInputChange}
+                  />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="edit-unit" className="text-right">
+                    Unit
+                  </Label>
+                  <Input
+                    id="edit-unit"
+                    name="unit"
+                    className="col-span-3"
+                    value={formData.unit}
+                    onChange={handleInputChange}
+                  />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="edit-min_value" className="text-right">
+                    Min Value
+                  </Label>
+                  <Input
+                    id="edit-min_value"
+                    name="min_value"
+                    type="number"
+                    className="col-span-3"
+                    value={formData.min_value}
+                    onChange={handleInputChange}
+                  />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="edit-max_value" className="text-right">
+                    Max Value
+                  </Label>
+                  <Input
+                    id="edit-max_value"
+                    name="max_value"
+                    type="number" 
+                    className="col-span-3"
+                    value={formData.max_value}
+                    onChange={handleInputChange}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button type="submit" onClick={handleUpdateParameter}>
+                  Update Parameter
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
 
-        {/* Parameters table */}
         <Card>
-          <CardHeader className="p-4 pb-2">
-            <CardTitle>Parameter List</CardTitle>
+          <CardHeader>
+            <CardTitle>All Parameters</CardTitle>
           </CardHeader>
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[200px]">Name</TableHead>
-                  <TableHead>Description</TableHead>
-                  <TableHead>Category</TableHead>
-                  <TableHead className="w-[100px]">Current Value</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="w-[150px]">Warning Thresholds</TableHead>
-                  <TableHead className="w-[150px]">Alarm Thresholds</TableHead>
-                  <TableHead className="w-[100px]">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredParameters.length > 0 ? (
-                  filteredParameters.map(parameter => (
+          <CardContent>
+            {loading ? (
+              <div className="text-center py-4">Loading parameters...</div>
+            ) : parameters.length === 0 ? (
+              <div className="text-center py-4">No parameters found. Add your first parameter to get started.</div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Value</TableHead>
+                    <TableHead>Unit</TableHead>
+                    <TableHead>Min/Max</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {parameters.map((parameter) => (
                     <TableRow key={parameter.id}>
                       <TableCell className="font-medium">{parameter.name}</TableCell>
-                      <TableCell>{parameter.description}</TableCell>
-                      <TableCell>{parameter.category}</TableCell>
+                      <TableCell>{parameter.value}</TableCell>
+                      <TableCell>{parameter.unit}</TableCell>
                       <TableCell>
-                        {parameter.value} {parameter.unit}
+                        {parameter.min_value !== null && parameter.max_value !== null
+                          ? `${parameter.min_value} - ${parameter.max_value}`
+                          : parameter.min_value !== null
+                          ? `Min: ${parameter.min_value}`
+                          : parameter.max_value !== null
+                          ? `Max: ${parameter.max_value}`
+                          : 'Not set'}
                       </TableCell>
                       <TableCell>
-                        <StatusIndicator status={parameter.status} />
+                        <span className={`px-2 py-1 rounded text-xs font-medium ${
+                          parameter.status === 'alarm' ? 'bg-red-100 text-red-800' :
+                          parameter.status === 'warning' ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-green-100 text-green-800'
+                        }`}>
+                          {parameter.status || 'normal'}
+                        </span>
                       </TableCell>
-                      <TableCell>
-                        {parameter.thresholds.warning.min} - {parameter.thresholds.warning.max} {parameter.unit}
-                      </TableCell>
-                      <TableCell>
-                        {parameter.thresholds.alarm.min} - {parameter.thresholds.alarm.max} {parameter.unit}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex space-x-2">
-                          <Button variant="ghost" size="icon" onClick={() => handleEditParameter(parameter)}>
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button variant="ghost" size="icon" onClick={() => handleDeleteParameter(parameter.id)}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleEditClick(parameter)}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleDeleteParameter(parameter.id, parameter.name)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </TableCell>
                     </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={8} className="text-center py-6">
-                      No parameters found matching your search criteria.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
           </CardContent>
         </Card>
       </div>
-
-      {/* Edit Thresholds Dialog */}
-      <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle>Edit Parameter Thresholds</DialogTitle>
-            <DialogDescription>
-              Adjust warning and alarm thresholds for the selected parameter.
-            </DialogDescription>
-          </DialogHeader>
-          
-          {currentParameter && (
-            <form onSubmit={handleSaveThresholds}>
-              <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <Label htmlFor="parameter-name">Parameter</Label>
-                  <Input id="parameter-name" value={currentParameter.name} readOnly />
-                </div>
-                
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="warning-min">Warning Min</Label>
-                    <Input 
-                      id="warning-min" 
-                      type="number" 
-                      value={currentParameter.thresholds.warning.min || ''} 
-                      onChange={(e) => setCurrentParameter({
-                        ...currentParameter,
-                        thresholds: {
-                          ...currentParameter.thresholds,
-                          warning: {
-                            ...currentParameter.thresholds.warning,
-                            min: e.target.value ? Number(e.target.value) : null
-                          }
-                        }
-                      })}
-                    />
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="warning-max">Warning Max</Label>
-                    <Input 
-                      id="warning-max" 
-                      type="number" 
-                      value={currentParameter.thresholds.warning.max || ''} 
-                      onChange={(e) => setCurrentParameter({
-                        ...currentParameter,
-                        thresholds: {
-                          ...currentParameter.thresholds,
-                          warning: {
-                            ...currentParameter.thresholds.warning,
-                            max: e.target.value ? Number(e.target.value) : null
-                          }
-                        }
-                      })}
-                    />
-                  </div>
-                </div>
-                
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="alarm-min">Alarm Min</Label>
-                    <Input 
-                      id="alarm-min" 
-                      type="number" 
-                      value={currentParameter.thresholds.alarm.min || ''} 
-                      onChange={(e) => setCurrentParameter({
-                        ...currentParameter,
-                        thresholds: {
-                          ...currentParameter.thresholds,
-                          alarm: {
-                            ...currentParameter.thresholds.alarm,
-                            min: e.target.value ? Number(e.target.value) : null
-                          }
-                        }
-                      })}
-                    />
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="alarm-max">Alarm Max</Label>
-                    <Input 
-                      id="alarm-max" 
-                      type="number" 
-                      value={currentParameter.thresholds.alarm.max || ''} 
-                      onChange={(e) => setCurrentParameter({
-                        ...currentParameter,
-                        thresholds: {
-                          ...currentParameter.thresholds,
-                          alarm: {
-                            ...currentParameter.thresholds.alarm,
-                            max: e.target.value ? Number(e.target.value) : null
-                          }
-                        }
-                      })}
-                    />
-                  </div>
-                </div>
-              </div>
-              
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setIsEditModalOpen(false)}>Cancel</Button>
-                <Button type="submit">Save Changes</Button>
-              </DialogFooter>
-            </form>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Add Parameter Dialog */}
-      <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle>Add New Parameter</DialogTitle>
-            <DialogDescription>
-              Create a new parameter to monitor in your system.
-            </DialogDescription>
-          </DialogHeader>
-          
-          <form onSubmit={handleSaveNewParameter}>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="new-name">Name</Label>
-                <Input 
-                  id="new-name" 
-                  value={newParameter.name} 
-                  onChange={(e) => setNewParameter({...newParameter, name: e.target.value})}
-                  required
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="new-description">Description</Label>
-                <Input 
-                  id="new-description" 
-                  value={newParameter.description} 
-                  onChange={(e) => setNewParameter({...newParameter, description: e.target.value})}
-                />
-              </div>
-              
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="new-category">Category</Label>
-                  <Input 
-                    id="new-category" 
-                    value={newParameter.category} 
-                    onChange={(e) => setNewParameter({...newParameter, category: e.target.value})}
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="new-unit">Unit</Label>
-                  <Input 
-                    id="new-unit" 
-                    value={newParameter.unit} 
-                    onChange={(e) => setNewParameter({...newParameter, unit: e.target.value})}
-                  />
-                </div>
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="new-value">Current Value</Label>
-                <Input 
-                  id="new-value" 
-                  type="number"
-                  value={newParameter.value} 
-                  onChange={(e) => setNewParameter({...newParameter, value: Number(e.target.value)})}
-                  required
-                />
-              </div>
-              
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="new-warning-min">Warning Min</Label>
-                  <Input 
-                    id="new-warning-min" 
-                    type="number" 
-                    value={newParameter.thresholds.warning.min || ''} 
-                    onChange={(e) => setNewParameter({
-                      ...newParameter,
-                      thresholds: {
-                        ...newParameter.thresholds,
-                        warning: {
-                          ...newParameter.thresholds.warning,
-                          min: e.target.value ? Number(e.target.value) : null
-                        }
-                      }
-                    })}
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="new-warning-max">Warning Max</Label>
-                  <Input 
-                    id="new-warning-max" 
-                    type="number" 
-                    value={newParameter.thresholds.warning.max || ''} 
-                    onChange={(e) => setNewParameter({
-                      ...newParameter,
-                      thresholds: {
-                        ...newParameter.thresholds,
-                        warning: {
-                          ...newParameter.thresholds.warning,
-                          max: e.target.value ? Number(e.target.value) : null
-                        }
-                      }
-                    })}
-                  />
-                </div>
-              </div>
-              
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="new-alarm-min">Alarm Min</Label>
-                  <Input 
-                    id="new-alarm-min" 
-                    type="number" 
-                    value={newParameter.thresholds.alarm.min || ''} 
-                    onChange={(e) => setNewParameter({
-                      ...newParameter,
-                      thresholds: {
-                        ...newParameter.thresholds,
-                        alarm: {
-                          ...newParameter.thresholds.alarm,
-                          min: e.target.value ? Number(e.target.value) : null
-                        }
-                      }
-                    })}
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="new-alarm-max">Alarm Max</Label>
-                  <Input 
-                    id="new-alarm-max" 
-                    type="number" 
-                    value={newParameter.thresholds.alarm.max || ''} 
-                    onChange={(e) => setNewParameter({
-                      ...newParameter,
-                      thresholds: {
-                        ...newParameter.thresholds,
-                        alarm: {
-                          ...newParameter.thresholds.alarm,
-                          max: e.target.value ? Number(e.target.value) : null
-                        }
-                      }
-                    })}
-                  />
-                </div>
-              </div>
-            </div>
-            
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setIsAddModalOpen(false)}>Cancel</Button>
-              <Button type="submit">Add Parameter</Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
     </DashboardLayout>
   );
 };

@@ -86,28 +86,36 @@ export const useAuth = () => {
 
   const signIn = async (email: string, password: string) => {
     try {
+      console.log('Signing in with:', email);
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password
       });
       
       if (error) throw error;
+      
+      console.log('Sign in successful:', data.user?.id);
+      // After successful login, user profile will be fetched by the auth state change listener
       return { data, error: null };
     } catch (error: any) {
+      console.error('Sign in error:', error.message);
       return { data: null, error };
     }
   };
 
   const signUp = async (email: string, password: string) => {
     try {
+      console.log('Signing up with:', email);
       const { data, error } = await supabase.auth.signUp({
         email,
         password
       });
       
       if (error) throw error;
+      console.log('Sign up successful:', data.user?.id);
       return { data, error: null };
     } catch (error: any) {
+      console.error('Sign up error:', error.message);
       return { data: null, error };
     }
   };
