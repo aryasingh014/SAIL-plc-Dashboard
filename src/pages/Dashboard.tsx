@@ -16,22 +16,21 @@ const Dashboard = () => {
   const [selectedParameters, setSelectedParameters] = useState<string[]>([]);
   const { parameters, connectionStatus, plcSettings, connectToPLC, fetchParameters } = usePLCConnection();
   const systemStatus = useSystemStatus(parameters, connectionStatus);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   
   // Set initial selected parameters when parameters are loaded
   useEffect(() => {
     if (parameters.length > 0 && selectedParameters.length === 0) {
       setSelectedParameters(parameters.slice(0, 4).map(p => p.id));
-    } else if (parameters.length === 0) {
-      setSelectedParameters([]);
-    } else {
+    } else if (parameters.length > 0) {
       // Filter out any selected parameters that no longer exist
       setSelectedParameters(prev => 
         prev.filter(id => parameters.some(p => p.id === id))
       );
     }
-  }, [parameters]);
+  }, [parameters, selectedParameters.length]);
   
-  const toggleParameterSelection = (parameterId: string) => {
+  const toggleParameterSelection = useCallback((parameterId: string) => {
     setSelectedParameters(prev => {
       if (prev.includes(parameterId)) {
         return prev.filter(id => id !== parameterId);
@@ -39,28 +38,36 @@ const Dashboard = () => {
         return [...prev, parameterId];
       }
     });
-  };
+  }, []);
   
   const filteredParameters = parameters.filter(p => selectedParameters.includes(p.id));
   const unacknowledgedAlerts = mockAlerts.filter(alert => !alert.acknowledged).length;
 
   const handleRefreshConnection = () => {
+    setIsRefreshing(true);
     connectToPLC();
+    
+    // Reset refresh state after a delay
+    setTimeout(() => {
+      setIsRefreshing(false);
+    }, 3000); 
   };
 
-  // Add a refresh effect to update parameters regularly
+  // Add a refresh effect to update parameters less frequently
   useEffect(() => {
     const refreshTimer = setInterval(() => {
       if (connectionStatus === 'normal') {
         fetchParameters();
       }
-    }, 30000); // Refresh every 30 seconds
+    }, 60000); // Refresh every 60 seconds instead of 30 for more stability
     
     return () => clearInterval(refreshTimer);
   }, [connectionStatus, fetchParameters]);
 
-  // Subscribe to real-time parameter changes
+  // Subscribe to real-time parameter changes with debounce
   useEffect(() => {
+    let timeout: NodeJS.Timeout;
+    
     const channel = supabase
       .channel('public:parameters')
       .on('postgres_changes', {
@@ -68,11 +75,16 @@ const Dashboard = () => {
         schema: 'public',
         table: 'parameters'
       }, () => {
-        fetchParameters();
+        // Debounce multiple rapid updates
+        clearTimeout(timeout);
+        timeout = setTimeout(() => {
+          fetchParameters();
+        }, 1000);
       })
       .subscribe();
 
     return () => {
+      clearTimeout(timeout);
       supabase.removeChannel(channel);
     };
   }, [fetchParameters]);
@@ -92,9 +104,10 @@ const Dashboard = () => {
               variant="outline" 
               size="icon" 
               onClick={handleRefreshConnection}
+              disabled={isRefreshing}
               title="Refresh PLC Connection"
             >
-              <RefreshCw className="h-4 w-4" />
+              <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
             </Button>
           </div>
         </div>

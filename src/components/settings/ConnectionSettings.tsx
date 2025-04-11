@@ -10,6 +10,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { toast } from "sonner";
+import { PLCConnectionSettings } from '@/types/parameter';
 
 const formSchema = z.object({
   ip: z.string().min(7, {
@@ -24,11 +25,24 @@ const formSchema = z.object({
 
 type ConnectionSettingsFormValues = z.infer<typeof formSchema>;
 
-const ConnectionSettings = () => {
+interface ConnectionSettingsProps {
+  initialSettings?: PLCConnectionSettings;
+}
+
+const ConnectionSettings: React.FC<ConnectionSettingsProps> = ({ initialSettings }) => {
   const [isSaving, setIsSaving] = useState(false);
 
   // Load saved settings from localStorage
   const loadSavedSettings = (): ConnectionSettingsFormValues => {
+    if (initialSettings) {
+      return {
+        ip: initialSettings.ip || '192.168.1.1',
+        port: initialSettings.port || '502',
+        protocol: initialSettings.protocol || 'modbus',
+        autoReconnect: initialSettings.autoReconnect !== undefined ? initialSettings.autoReconnect : true,
+      };
+    }
+    
     const savedSettings = localStorage.getItem('plcSettings');
     if (savedSettings) {
       try {
@@ -51,6 +65,18 @@ const ConnectionSettings = () => {
     resolver: zodResolver(formSchema),
     defaultValues: loadSavedSettings(),
   });
+
+  // Update form when initialSettings change
+  useEffect(() => {
+    if (initialSettings) {
+      form.reset({
+        ip: initialSettings.ip,
+        port: initialSettings.port,
+        protocol: initialSettings.protocol,
+        autoReconnect: initialSettings.autoReconnect
+      });
+    }
+  }, [initialSettings, form]);
 
   const onSubmit = async (data: ConnectionSettingsFormValues) => {
     setIsSaving(true);

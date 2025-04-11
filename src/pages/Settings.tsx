@@ -8,13 +8,14 @@ import DataCollectionSettings from '@/components/settings/DataCollectionSettings
 import UserManagement from '@/components/settings/UserManagement';
 import AccessDenied from '@/components/settings/AccessDenied';
 import LoadingSettings from '@/components/settings/LoadingSettings';
+import { PLCConnectionSettings } from '@/types/parameter';
 
 const Settings = () => {
   const { profile, loading } = useAuthContext();
-  const [plcSettings, setPlcSettings] = useState({
-    ip: '',
-    port: '102',
-    protocol: 'opcua',
+  const [plcSettings, setPlcSettings] = useState<PLCConnectionSettings>({
+    ip: '192.168.1.1',
+    port: '502',
+    protocol: 'modbus',
     autoReconnect: true
   });
   
@@ -22,13 +23,17 @@ const Settings = () => {
     // Load saved settings from localStorage if available
     const savedSettings = localStorage.getItem('plcSettings');
     if (savedSettings) {
-      const settings = JSON.parse(savedSettings);
-      setPlcSettings({
-        ip: settings.ip || '',
-        port: settings.port || '102',
-        protocol: settings.protocol || 'opcua',
-        autoReconnect: settings.autoReconnect !== undefined ? settings.autoReconnect : true
-      });
+      try {
+        const settings = JSON.parse(savedSettings);
+        setPlcSettings({
+          ip: settings.ip || '192.168.1.1',
+          port: settings.port || '502',
+          protocol: settings.protocol || 'modbus',
+          autoReconnect: settings.autoReconnect !== undefined ? settings.autoReconnect : true
+        });
+      } catch (error) {
+        console.error('Failed to parse PLC settings:', error);
+      }
     }
   }, []);
 

@@ -1,5 +1,5 @@
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Parameter, StatusType, PLCConnectionSettings } from '@/types/parameter';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -9,14 +9,40 @@ export function usePLCConnection() {
   const [parameters, setParameters] = useState<Parameter[]>([]);
   const [connectionStatus, setConnectionStatus] = useState<StatusType>('disconnected');
   const [plcSettings, setPlcSettings] = useState<PLCConnectionSettings>({
-    ip: '198.162.0.1',
-    port: '102',
-    protocol: 'opcua',
+    ip: '192.168.1.1',
+    port: '502',
+    protocol: 'modbus',
     autoReconnect: true
   });
   const { toast } = useToast();
+  const connectionAttemptRef = useRef(false);
+  const updateIntervalRef = useRef<number | null>(null);
+  const subscriptionRef = useRef<{ unsubscribe: () => void } | null>(null);
+
+  const fetchParameters = useCallback(async () => {
+    try {
+      // Fetch parameters from Supabase
+      const supabaseParams = await fetchParametersFromAPI();
+      
+      if (supabaseParams && supabaseParams.length > 0) {
+        // Transform Supabase data to match Parameter type
+        const formattedParams: Parameter[] = supabaseParams.map(p => convertToParameter(p));
+        setParameters(formattedParams);
+      } else {
+        // If no parameters found, set empty array
+        setParameters([]);
+      }
+    } catch (error) {
+      console.error('Error in fetchParameters:', error);
+      setParameters([]);
+    }
+  }, []);
 
   const connectToPLC = useCallback(() => {
+    // Prevent multiple connection attempts
+    if (connectionAttemptRef.current) return;
+    connectionAttemptRef.current = true;
+    
     const savedSettings = localStorage.getItem('plcSettings');
     if (savedSettings) {
       setPlcSettings(JSON.parse(savedSettings));
@@ -29,7 +55,7 @@ export function usePLCConnection() {
       description: `Attempting to connect to PLC at ${plcSettings.ip}:${plcSettings.port} using ${plcSettings.protocol.toUpperCase()}...`,
     });
     
-    // Simulate connection
+    // Simulate connection with a stable timeout
     const connectionTimer = setTimeout(() => {
       const randomSuccess = Math.random() > 0.2;
       
@@ -50,38 +76,63 @@ export function usePLCConnection() {
           description: `Failed to connect to PLC at ${plcSettings.ip}. Please check connection settings.`,
         });
       }
+      
+      // Reset connection attempt flag after completion
+      connectionAttemptRef.current = false;
     }, 3000);
     
-    return () => clearTimeout(connectionTimer);
-  }, [plcSettings, toast]);
+    return () => {
+      clearTimeout(connectionTimer);
+      connectionAttemptRef.current = false;
+    };
+  }, [plcSettings, toast, fetchParameters]);
 
-  const fetchParameters = async () => {
-    try {
-      // Fetch parameters from Supabase
-      const supabaseParams = await fetchParametersFromAPI();
-      
-      if (supabaseParams && supabaseParams.length > 0) {
-        // Transform Supabase data to match Parameter type
-        const formattedParams: Parameter[] = supabaseParams.map(p => convertToParameter(p));
-        setParameters(formattedParams);
-      } else {
-        // If no parameters found, set empty array
-        setParameters([]);
-      }
-    } catch (error) {
-      console.error('Error in fetchParameters:', error);
-      setParameters([]);
+  // Set up Supabase realtime subscription for parameter changes
+  useEffect(() => {
+    // Clean up previous subscription if it exists
+    if (subscriptionRef.current) {
+      subscriptionRef.current.unsubscribe();
+      subscriptionRef.current = null;
     }
-  };
+    
+    const channel = supabase
+      .channel('public:parameters')
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'parameters' 
+      }, (payload) => {
+        console.log('Database change detected:', payload);
+        
+        // Refetch all parameters when any change occurs
+        fetchParameters();
+      })
+      .subscribe();
+    
+    subscriptionRef.current = channel;
+      
+    return () => {
+      if (subscriptionRef.current) {
+        subscriptionRef.current.unsubscribe();
+        subscriptionRef.current = null;
+      }
+    };
+  }, [fetchParameters]);
 
   // This effect updates parameter values with simulated data
   useEffect(() => {
+    // Clear any existing update interval
+    if (updateIntervalRef.current) {
+      clearInterval(updateIntervalRef.current);
+      updateIntervalRef.current = null;
+    }
+    
     if (connectionStatus !== 'normal' || parameters.length === 0) return;
     
     const updateInterval = setInterval(() => {
       setParameters(prev => 
         prev.map(parameter => {
-          const change = (Math.random() - 0.5) * 0.1;
+          const change = (Math.random() - 0.5) * 0.05; // Reduced change amount to prevent erratic updates
           const newValue = parameter.value * (1 + change);
           
           let status: 'normal' | 'warning' | 'alarm' = 'normal';
@@ -100,42 +151,42 @@ export function usePLCConnection() {
           
           return {
             ...parameter,
-            value: Number(newValue.toFixed(1)),
+            value: Number(newValue.toFixed(2)),
             status,
             timestamp: new Date().toISOString()
           };
         })
       );
-    }, 5000);
+    }, 10000); // Increased interval to 10 seconds for more stability
     
-    return () => clearInterval(updateInterval);
-  }, [connectionStatus, parameters.length]);
-
-  // Set up Supabase realtime subscription for parameter changes
-  useEffect(() => {
-    const channel = supabase
-      .channel('public:parameters')
-      .on('postgres_changes', { 
-        event: '*', 
-        schema: 'public', 
-        table: 'parameters' 
-      }, (payload) => {
-        console.log('Database change detected:', payload);
-        
-        // Refetch all parameters when any change occurs
-        fetchParameters();
-      })
-      .subscribe();
-      
+    updateIntervalRef.current = updateInterval;
+    
     return () => {
-      supabase.removeChannel(channel);
+      if (updateIntervalRef.current) {
+        clearInterval(updateIntervalRef.current);
+        updateIntervalRef.current = null;
+      }
     };
-  }, []);
+  }, [connectionStatus, parameters]);
 
-  // Connect to PLC on component mount
+  // Connect to PLC on component mount, but only once
   useEffect(() => {
     connectToPLC();
-  }, [connectToPLC]);
+    
+    // Initial fetch regardless of connection status
+    fetchParameters();
+    
+    return () => {
+      if (updateIntervalRef.current) {
+        clearInterval(updateIntervalRef.current);
+        updateIntervalRef.current = null;
+      }
+      if (subscriptionRef.current) {
+        subscriptionRef.current.unsubscribe();
+        subscriptionRef.current = null;
+      }
+    };
+  }, [connectToPLC, fetchParameters]);
 
   return {
     parameters,

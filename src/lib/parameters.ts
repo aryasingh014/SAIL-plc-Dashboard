@@ -109,7 +109,7 @@ export async function deleteParameter(id: string) {
       toast("Failed to delete parameter", {
         description: error.message
       });
-      return false;
+      throw error;
     }
 
     toast("Parameter deleted successfully");
