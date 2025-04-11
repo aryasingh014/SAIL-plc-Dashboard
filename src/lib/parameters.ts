@@ -59,11 +59,16 @@ export async function createParameter(parameter: ParameterData) {
     
     if (error) {
       console.error('Error creating parameter:', error);
-      toast.error('Failed to create parameter: ' + error.message);
+      toast({
+        title: "Failed to create parameter",
+        description: error.message
+      });
       throw error;
     }
 
-    toast.success('Parameter created successfully');
+    toast({
+      title: "Parameter created successfully"
+    });
     return data?.[0];
   } catch (error) {
     console.error('Error in createParameter:', error);
@@ -81,11 +86,16 @@ export async function updateParameter(id: string, parameter: Partial<ParameterDa
     
     if (error) {
       console.error('Error updating parameter:', error);
-      toast.error('Failed to update parameter: ' + error.message);
+      toast({
+        title: "Failed to update parameter",
+        description: error.message
+      });
       throw error;
     }
 
-    toast.success('Parameter updated successfully');
+    toast({
+      title: "Parameter updated successfully"
+    });
     return data?.[0];
   } catch (error) {
     console.error('Error in updateParameter:', error);
@@ -102,15 +112,22 @@ export async function deleteParameter(id: string) {
     
     if (error) {
       console.error('Error deleting parameter:', error);
-      toast.error('Failed to delete parameter: ' + error.message);
+      toast({
+        title: "Failed to delete parameter",
+        description: error.message
+      });
       return false;
     }
 
-    toast.success('Parameter deleted successfully');
+    toast({
+      title: "Parameter deleted successfully"
+    });
     return true;
   } catch (error) {
     console.error('Error in deleteParameter:', error);
-    toast.error('Failed to delete parameter');
+    toast({
+      title: "Failed to delete parameter"
+    });
     return false;
   }
 }
