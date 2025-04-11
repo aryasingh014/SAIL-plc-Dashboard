@@ -19,7 +19,7 @@ const formSchema = z.object({
   port: z.string().min(1, {
     message: "Port is required",
   }),
-  protocol: z.enum(["modbus", "opcua", "ethernet-ip"]),
+  protocol: z.enum(["modbus", "opcua", "ethernet-ip", "snap7", "s7comm"]),
   autoReconnect: z.boolean().default(true),
 });
 
@@ -164,6 +164,8 @@ const ConnectionSettings: React.FC<ConnectionSettingsProps> = ({ initialSettings
                         <SelectItem value="modbus">Modbus TCP</SelectItem>
                         <SelectItem value="opcua">OPC UA</SelectItem>
                         <SelectItem value="ethernet-ip">Ethernet/IP</SelectItem>
+                        <SelectItem value="snap7">S7 SNAP</SelectItem>
+                        <SelectItem value="s7comm">S7 Communication</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormDescription>

@@ -49,6 +49,6 @@ export interface Alert {
 export interface PLCConnectionSettings {
   ip: string;
   port: string;
-  protocol: 'opcua' | 'snap7' | 's7comm';
+  protocol: 'opcua' | 'modbus' | 'ethernet-ip' | 'snap7' | 's7comm';
   autoReconnect: boolean;
 }

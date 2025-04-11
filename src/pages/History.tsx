@@ -1,9 +1,9 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getAllParameters, getMockParameterHistory } from '@/data/mockData';
+import { getAllParameters } from '@/data/mockData';
 import { Parameter, ParameterHistoryEntry } from '@/types/parameter';
 import { Calendar as CalendarIcon } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -12,6 +12,15 @@ import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { CheckCircle, AlertTriangle, AlertCircle } from 'lucide-react';
+import { fetchParameterHistory } from '@/lib/parameters';
+import { supabase } from '@/integrations/supabase/client';
+
+interface HistoryDataEntry {
+  parameter_id: string;
+  value: number;
+  status: string;
+  timestamp: string;
+}
 
 const History = () => {
   const [parameters, setParameters] = useState<Parameter[]>([]);
@@ -19,49 +28,165 @@ const History = () => {
   const [startDate, setStartDate] = useState<Date | undefined>(new Date(Date.now() - 24 * 60 * 60 * 1000)); // 24 hours ago
   const [endDate, setEndDate] = useState<Date | undefined>(new Date());
   const [chartData, setChartData] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [historyData, setHistoryData] = useState<HistoryDataEntry[]>([]);
 
+  // Fetch parameters
   useEffect(() => {
-    // Load parameters
-    const allParams = getAllParameters();
-    setParameters(allParams);
+    const fetchAllParameters = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('parameters')
+          .select('*');
+        
+        if (error) {
+          console.error('Error fetching parameters:', error);
+          throw error;
+        }
+        
+        if (data) {
+          const parsedParams = data.map(p => ({
+            id: p.id,
+            name: p.name,
+            description: `${p.name} parameter`,
+            unit: p.unit || '',
+            value: p.value,
+            status: p.status || 'normal',
+            thresholds: {
+              warning: {
+                min: p.min_value || null,
+                max: p.max_value || null
+              },
+              alarm: {
+                min: p.min_value ? p.min_value * 0.9 : null,
+                max: p.max_value ? p.max_value * 1.1 : null
+              }
+            },
+            timestamp: p.updated_at || new Date().toISOString(),
+            category: 'Custom'
+          }));
+          
+          setParameters(parsedParams);
+          
+          // By default, select the first parameter
+          if (parsedParams.length > 0 && selectedParameters.length === 0) {
+            setSelectedParameters([parsedParams[0].id]);
+          }
+        }
+      } catch (error) {
+        console.error('Error loading parameters:', error);
+        // Fallback to mock data
+        const allParams = getAllParameters();
+        setParameters(allParams);
+        
+        if (allParams.length > 0 && selectedParameters.length === 0) {
+          setSelectedParameters([allParams[0].id]);
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
     
-    // By default, select the first parameter
-    if (allParams.length > 0) {
-      setSelectedParameters([allParams[0].id]);
-    }
+    fetchAllParameters();
   }, []);
 
+  // Fetch parameter history when selected parameters change
   useEffect(() => {
-    if (selectedParameters.length === 0 || !startDate || !endDate) {
+    const fetchHistory = async () => {
+      if (selectedParameters.length === 0 || !startDate || !endDate) {
+        setHistoryData([]);
+        return;
+      }
+      
+      setLoading(true);
+      
+      try {
+        // Check if parameter_history table exists
+        const { data, error } = await supabase
+          .from('parameter_history')
+          .select('*')
+          .in('parameter_id', selectedParameters)
+          .gte('timestamp', startDate.toISOString())
+          .lte('timestamp', endDate.toISOString())
+          .order('timestamp', { ascending: true });
+        
+        if (error) {
+          console.error('Error fetching parameter history:', error);
+          throw error;
+        }
+        
+        if (data) {
+          setHistoryData(data);
+        }
+      } catch (error) {
+        console.error('Error loading parameter history:', error);
+        // If table doesn't exist or another error occurs, use mock data
+        const mockHistory: HistoryDataEntry[] = [];
+        
+        // Generate mock data for each selected parameter
+        for (const parameterId of selectedParameters) {
+          const parameter = parameters.find(p => p.id === parameterId);
+          if (parameter) {
+            const start = new Date(startDate).getTime();
+            const end = new Date(endDate).getTime();
+            const step = (end - start) / 20; // Generate 20 data points
+            
+            for (let time = start; time <= end; time += step) {
+              const value = parameter.value * (0.8 + Math.random() * 0.4); // Random value around parameter.value
+              let status = 'normal';
+              
+              if (
+                (parameter.thresholds.alarm.min !== null && value < parameter.thresholds.alarm.min) ||
+                (parameter.thresholds.alarm.max !== null && value > parameter.thresholds.alarm.max)
+              ) {
+                status = 'alarm';
+              } else if (
+                (parameter.thresholds.warning.min !== null && value < parameter.thresholds.warning.min) ||
+                (parameter.thresholds.warning.max !== null && value > parameter.thresholds.warning.max)
+              ) {
+                status = 'warning';
+              }
+              
+              mockHistory.push({
+                parameter_id: parameterId,
+                value: Number(value.toFixed(2)),
+                status,
+                timestamp: new Date(time).toISOString()
+              });
+            }
+          }
+        }
+        
+        setHistoryData(mockHistory);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchHistory();
+  }, [selectedParameters, startDate, endDate, parameters]);
+
+  // Process history data for chart when historyData changes
+  useEffect(() => {
+    if (historyData.length === 0) {
       setChartData([]);
       return;
     }
-
+    
     // Create a mapping of timestamps to data points for each selected parameter
     const timestampMap: Record<string, any> = {};
     
-    selectedParameters.forEach(parameterId => {
-      const parameter = parameters.find(p => p.id === parameterId);
+    historyData.forEach(entry => {
+      const parameter = parameters.find(p => p.id === entry.parameter_id);
       if (!parameter) return;
       
-      const history = getMockParameterHistory(parameterId);
+      const timestamp = entry.timestamp;
+      if (!timestampMap[timestamp]) {
+        timestampMap[timestamp] = { timestamp: new Date(timestamp).toLocaleString() };
+      }
       
-      // Filter by date range
-      const filteredData = history.data.filter(entry => {
-        const entryDate = new Date(entry.timestamp);
-        return entryDate >= startDate && entryDate <= endDate;
-      });
-      
-      // Add data points to the timestamp map
-      filteredData.forEach(entry => {
-        const timestamp = entry.timestamp;
-        if (!timestampMap[timestamp]) {
-          timestampMap[timestamp] = { timestamp: new Date(timestamp).toLocaleString() };
-        }
-        
-        timestampMap[timestamp][parameter.name] = entry.value;
-        timestampMap[timestamp][`${parameter.name}-status`] = entry.status;
-      });
+      timestampMap[timestamp][parameter.name] = entry.value;
+      timestampMap[timestamp][`${parameter.name}-status`] = entry.status;
     });
     
     // Convert the timestamp map to an array of data points
@@ -73,7 +198,7 @@ const History = () => {
     });
     
     setChartData(formattedData);
-  }, [selectedParameters, startDate, endDate, parameters]);
+  }, [historyData, parameters]);
 
   const toggleParameterSelection = (parameterId: string) => {
     setSelectedParameters(prev => {
@@ -177,7 +302,11 @@ const History = () => {
             <CardTitle>Historical Trends</CardTitle>
           </CardHeader>
           <CardContent className="p-4">
-            {selectedParameters.length > 0 && chartData.length > 0 ? (
+            {loading ? (
+              <div className="flex items-center justify-center h-[400px]">
+                <p className="text-lg text-muted-foreground">Loading historical data...</p>
+              </div>
+            ) : selectedParameters.length > 0 && chartData.length > 0 ? (
               <div className="h-[500px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart

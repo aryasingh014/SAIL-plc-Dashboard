@@ -12,7 +12,8 @@ import { Alert } from '@/types/parameter';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Bell, CheckCircle, AlertTriangle, AlertCircle, Mail, Phone } from 'lucide-react';
-import { useToast } from '@/components/ui/use-toast';
+import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
 
 const Alerts = () => {
   const [alerts, setAlerts] = useState<Alert[]>([]);
@@ -20,13 +21,117 @@ const Alerts = () => {
   const [smsNotification, setSmsNotification] = useState(false);
   const [email, setEmail] = useState('admin@example.com');
   const [phone, setPhone] = useState('');
-  const { toast } = useToast();
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     // Load alerts
     const allAlerts = getAllAlerts();
     setAlerts(allAlerts);
+    
+    // Load saved notification settings from localStorage
+    const savedSettings = localStorage.getItem('notificationSettings');
+    if (savedSettings) {
+      try {
+        const settings = JSON.parse(savedSettings);
+        setEmailNotification(settings.emailNotification ?? true);
+        setSmsNotification(settings.smsNotification ?? false);
+        setEmail(settings.email || 'admin@example.com');
+        setPhone(settings.phone || '');
+      } catch (error) {
+        console.error('Failed to parse notification settings:', error);
+      }
+    }
+    
+    // Subscribe to parameter status changes for generating alerts
+    const channel = supabase
+      .channel('parameter-status-changes')
+      .on('postgres_changes', { 
+        event: 'UPDATE', 
+        schema: 'public', 
+        table: 'parameters',
+        filter: 'status=in.(warning,alarm)'
+      }, (payload) => {
+        console.log('Parameter status change detected:', payload);
+        handleParameterStatusChange(payload.new);
+      })
+      .subscribe();
+      
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
+
+  const handleParameterStatusChange = (parameter: any) => {
+    if (parameter.status === 'warning' || parameter.status === 'alarm') {
+      // Create a new alert
+      const newAlert: Alert = {
+        id: Date.now().toString(),
+        parameterId: parameter.id,
+        parameterName: parameter.name,
+        value: parameter.value,
+        threshold: parameter.status === 'warning' ? parameter.min_value || parameter.max_value : 0,
+        status: parameter.status,
+        timestamp: new Date().toISOString(),
+        acknowledged: false,
+        notified: false
+      };
+      
+      // Add the new alert to the list
+      setAlerts(prev => [newAlert, ...prev]);
+      
+      // Send notifications if enabled
+      if (emailNotification && email) {
+        sendEmailNotification(newAlert);
+      }
+      
+      if (smsNotification && phone) {
+        sendSMSNotification(newAlert);
+      }
+      
+      // Show a toast notification
+      toast(`${parameter.status.toUpperCase()} Alert`, {
+        description: `Parameter ${parameter.name} has a value of ${parameter.value} which triggered a ${parameter.status} alert.`
+      });
+    }
+  };
+
+  const sendEmailNotification = async (alert: Alert) => {
+    // In a real application, this would call an API to send an email
+    console.log(`Sending email notification to ${email} for alert:`, alert);
+    
+    // Simulate API call
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    // Update the alert to mark it as notified
+    setAlerts(prev => 
+      prev.map(a => 
+        a.id === alert.id ? { ...a, notified: true } : a
+      )
+    );
+    
+    toast("Email Alert Sent", {
+      description: `Email notification sent to ${email}`
+    });
+  };
+
+  const sendSMSNotification = async (alert: Alert) => {
+    // In a real application, this would call an API to send an SMS
+    console.log(`Sending SMS notification to ${phone} for alert:`, alert);
+    
+    // Simulate API call
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    // Update the alert to mark it as notified
+    setAlerts(prev => 
+      prev.map(a => 
+        a.id === alert.id ? { ...a, notified: true } : a
+      )
+    );
+    
+    toast("SMS Alert Sent", {
+      description: `SMS notification sent to ${phone}`
+    });
+  };
 
   const handleAcknowledge = (alertId: string) => {
     setAlerts(prev => 
@@ -35,17 +140,35 @@ const Alerts = () => {
       )
     );
     
-    toast({
-      title: "Alert Acknowledged",
-      description: "The alert has been acknowledged.",
+    toast("Alert Acknowledged", {
+      description: "The alert has been acknowledged."
     });
   };
 
   const handleSaveNotificationSettings = () => {
-    toast({
-      title: "Notification Settings Saved",
-      description: "Your notification preferences have been updated.",
-    });
+    setIsSaving(true);
+    
+    try {
+      // Save notification settings to localStorage
+      const settings = {
+        emailNotification,
+        smsNotification,
+        email,
+        phone
+      };
+      
+      localStorage.setItem('notificationSettings', JSON.stringify(settings));
+      
+      toast("Notification Settings Saved", {
+        description: "Your notification preferences have been updated."
+      });
+    } catch (error) {
+      toast("Save Failed", {
+        description: "Failed to save notification settings."
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const getStatusIcon = (status: 'warning' | 'alarm') => {
@@ -201,8 +324,11 @@ const Alerts = () => {
                     </div>
                   )}
                   
-                  <Button onClick={handleSaveNotificationSettings}>
-                    Save Notification Settings
+                  <Button 
+                    onClick={handleSaveNotificationSettings}
+                    disabled={isSaving}
+                  >
+                    {isSaving ? "Saving..." : "Save Notification Settings"}
                   </Button>
                 </div>
               </CardContent>

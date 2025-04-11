@@ -16,7 +16,7 @@ export function usePLCConnection() {
   });
   const { toast } = useToast();
   const connectionAttemptRef = useRef(false);
-  const updateIntervalRef = useRef<number | null>(null);
+  const updateIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const subscriptionRef = useRef<{ unsubscribe: () => void } | null>(null);
 
   const fetchParameters = useCallback(async () => {
@@ -118,6 +118,42 @@ export function usePLCConnection() {
       }
     };
   }, [fetchParameters]);
+
+  // Save parameter history on value change
+  useEffect(() => {
+    const saveParameterHistory = async () => {
+      if (parameters.length === 0) return;
+      
+      try {
+        // For each parameter, save a history entry
+        for (const parameter of parameters) {
+          const historyEntry = {
+            parameter_id: parameter.id,
+            value: parameter.value,
+            status: parameter.status,
+            timestamp: new Date().toISOString()
+          };
+          
+          // Save to 'parameter_history' table in Supabase
+          const { error } = await supabase
+            .from('parameter_history')
+            .insert(historyEntry)
+            .select();
+            
+          if (error) {
+            console.error('Error saving parameter history:', error);
+          }
+        }
+      } catch (error) {
+        console.error('Error in saveParameterHistory:', error);
+      }
+    };
+    
+    // Save history every time parameters change and connection is normal
+    if (connectionStatus === 'normal' && parameters.length > 0) {
+      saveParameterHistory();
+    }
+  }, [parameters, connectionStatus]);
 
   // This effect updates parameter values with simulated data
   useEffect(() => {

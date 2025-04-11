@@ -14,6 +14,13 @@ export interface ParameterData {
   user_id?: string;
 }
 
+export interface ParameterHistoryData {
+  parameter_id: string;
+  value: number;
+  status: string;
+  timestamp: string;
+}
+
 export async function fetchParameters() {
   try {
     const { data, error } = await supabase
@@ -29,6 +36,27 @@ export async function fetchParameters() {
     return data || [];
   } catch (error) {
     console.error('Error in fetchParameters:', error);
+    return [];
+  }
+}
+
+export async function fetchParameterHistory(parameterId: string) {
+  try {
+    const { data, error } = await supabase
+      .from('parameter_history')
+      .select('*')
+      .eq('parameter_id', parameterId)
+      .order('timestamp', { ascending: false })
+      .limit(100);
+    
+    if (error) {
+      console.error('Error fetching parameter history:', error);
+      throw error;
+    }
+
+    return data || [];
+  } catch (error) {
+    console.error('Error in fetchParameterHistory:', error);
     return [];
   }
 }
@@ -117,6 +145,24 @@ export async function deleteParameter(id: string) {
   } catch (error) {
     console.error('Error in deleteParameter:', error);
     toast("Failed to delete parameter");
+    return false;
+  }
+}
+
+export async function addParameterHistoryEntry(entry: ParameterHistoryData) {
+  try {
+    const { error } = await supabase
+      .from('parameter_history')
+      .insert(entry);
+    
+    if (error) {
+      console.error('Error adding parameter history entry:', error);
+      throw error;
+    }
+
+    return true;
+  } catch (error) {
+    console.error('Error in addParameterHistoryEntry:', error);
     return false;
   }
 }
