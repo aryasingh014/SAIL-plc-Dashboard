@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Button } from "@/components/ui/button";
 import StatusIndicator from '@/components/StatusIndicator';
@@ -13,15 +13,22 @@ import { useSystemStatus } from '@/hooks/use-system-status';
 
 const Dashboard = () => {
   const [selectedParameters, setSelectedParameters] = useState<string[]>([]);
-  const { parameters, connectionStatus, plcSettings, connectToPLC } = usePLCConnection();
+  const { parameters, connectionStatus, plcSettings, connectToPLC, fetchParameters } = usePLCConnection();
   const systemStatus = useSystemStatus(parameters, connectionStatus);
   
   // Set initial selected parameters when parameters are loaded
-  React.useEffect(() => {
+  useEffect(() => {
     if (parameters.length > 0 && selectedParameters.length === 0) {
       setSelectedParameters(parameters.slice(0, 4).map(p => p.id));
+    } else if (parameters.length === 0) {
+      setSelectedParameters([]);
+    } else {
+      // Filter out any selected parameters that no longer exist
+      setSelectedParameters(prev => 
+        prev.filter(id => parameters.some(p => p.id === id))
+      );
     }
-  }, [parameters, selectedParameters.length]);
+  }, [parameters]);
   
   const toggleParameterSelection = (parameterId: string) => {
     setSelectedParameters(prev => {
@@ -39,6 +46,17 @@ const Dashboard = () => {
   const handleRefreshConnection = () => {
     connectToPLC();
   };
+
+  // Add a refresh effect to update parameters regularly
+  useEffect(() => {
+    const refreshTimer = setInterval(() => {
+      if (connectionStatus === 'normal') {
+        fetchParameters();
+      }
+    }, 30000); // Refresh every 30 seconds
+    
+    return () => clearInterval(refreshTimer);
+  }, [connectionStatus, fetchParameters]);
 
   return (
     <DashboardLayout>
@@ -69,13 +87,30 @@ const Dashboard = () => {
           unacknowledgedAlerts={unacknowledgedAlerts}
         />
 
-        <ParameterSelector 
-          parameters={parameters}
-          selectedParameters={selectedParameters}
-          toggleParameterSelection={toggleParameterSelection}
-        />
+        {parameters.length > 0 ? (
+          <>
+            <ParameterSelector 
+              parameters={parameters}
+              selectedParameters={selectedParameters}
+              toggleParameterSelection={toggleParameterSelection}
+            />
 
-        <ParameterGrid parameters={filteredParameters} />
+            <ParameterGrid parameters={filteredParameters} />
+          </>
+        ) : (
+          <div className="text-center p-8 bg-muted rounded-lg">
+            <h3 className="text-lg font-medium">No parameters available</h3>
+            <p className="text-muted-foreground">
+              Please add parameters in the Parameters section to monitor them.
+            </p>
+            <Button 
+              className="mt-4" 
+              onClick={() => window.location.href = '/parameters'}
+            >
+              Go to Parameters
+            </Button>
+          </div>
+        )}
       </div>
     </DashboardLayout>
   );

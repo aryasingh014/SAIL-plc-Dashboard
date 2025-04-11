@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useToast } from '@/components/ui/use-toast';
 import DashboardLayout from '@/components/layout/DashboardLayout';
@@ -26,9 +25,11 @@ import {
 import { Pencil, Trash2, Plus } from 'lucide-react';
 import { useAuthContext } from '@/context/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
+import { fetchParameters, createParameter, updateParameter, deleteParameter } from '@/lib/parameters';
 
 const Parameters = () => {
-  const { toast } = useToast();
+  const { toast: uiToast } = useToast();
   const { user } = useAuthContext();
   const [parameters, setParameters] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -46,28 +47,36 @@ const Parameters = () => {
     status: 'normal'
   });
 
-  // Fetch parameters on component mount
+  // Fetch parameters on component mount and set up subscription
   useEffect(() => {
-    fetchParameters();
+    getParameters();
+    
+    // Set up real-time subscription
+    const channel = supabase
+      .channel('public:parameters')
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'parameters' 
+      }, (payload) => {
+        console.log('Parameters change detected:', payload);
+        getParameters();
+      })
+      .subscribe();
+      
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
-  const fetchParameters = async () => {
+  const getParameters = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
-        .from('parameters')
-        .select('*')
-        .order('name');
-      
-      if (error) {
-        throw error;
-      }
-      
+      const data = await fetchParameters();
       setParameters(data || []);
-      console.log('Fetched parameters:', data);
     } catch (error) {
-      console.error('Error fetching parameters:', error);
-      toast({
+      console.error('Error in getParameters:', error);
+      uiToast({
         variant: "destructive",
         title: "Failed to load parameters",
         description: error.message,
@@ -100,7 +109,7 @@ const Parameters = () => {
     try {
       // Validate input
       if (!formData.name || !formData.value) {
-        toast({
+        uiToast({
           variant: "destructive",
           title: "Validation Error",
           description: "Name and value are required fields",
@@ -118,27 +127,15 @@ const Parameters = () => {
         user_id: user.id
       };
 
-      const { data, error } = await supabase
-        .from('parameters')
-        .insert(newParameter)
-        .select();
-
-      if (error) {
-        throw error;
-      }
-
-      toast({
-        title: "Parameter Added",
-        description: `${formData.name} has been successfully added`,
-      });
-
+      await createParameter(newParameter);
+      
       // Refresh parameters list
-      fetchParameters();
+      getParameters();
       resetForm();
       setIsAddDialogOpen(false);
     } catch (error) {
       console.error('Error adding parameter:', error);
-      toast({
+      uiToast({
         variant: "destructive",
         title: "Failed to add parameter",
         description: error.message,
@@ -172,26 +169,14 @@ const Parameters = () => {
         status: formData.status
       };
 
-      const { error } = await supabase
-        .from('parameters')
-        .update(updatedParameter)
-        .eq('id', currentParameter.id);
+      await updateParameter(currentParameter.id, updatedParameter);
 
-      if (error) {
-        throw error;
-      }
-
-      toast({
-        title: "Parameter Updated",
-        description: `${formData.name} has been successfully updated`,
-      });
-
-      fetchParameters();
+      getParameters();
       resetForm();
       setIsEditDialogOpen(false);
     } catch (error) {
       console.error('Error updating parameter:', error);
-      toast({
+      uiToast({
         variant: "destructive",
         title: "Failed to update parameter",
         description: error.message,
@@ -203,24 +188,11 @@ const Parameters = () => {
     if (!confirm(`Are you sure you want to delete ${name}?`)) return;
 
     try {
-      const { error } = await supabase
-        .from('parameters')
-        .delete()
-        .eq('id', id);
-
-      if (error) {
-        throw error;
-      }
-
-      toast({
-        title: "Parameter Deleted",
-        description: `${name} has been successfully deleted`,
-      });
-
-      fetchParameters();
+      await deleteParameter(id);
+      getParameters();
     } catch (error) {
       console.error('Error deleting parameter:', error);
-      toast({
+      uiToast({
         variant: "destructive",
         title: "Failed to delete parameter",
         description: error.message,

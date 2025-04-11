@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Parameter, StatusType, PLCConnectionSettings } from '@/types/parameter';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { convertToParameter } from '@/lib/parameters';
+import { convertToParameter, fetchParameters as fetchParametersFromAPI } from '@/lib/parameters';
 
 export function usePLCConnection() {
   const [parameters, setParameters] = useState<Parameter[]>([]);
@@ -57,40 +57,26 @@ export function usePLCConnection() {
 
   const fetchParameters = async () => {
     try {
-      // First try to fetch real parameters from Supabase
-      const { data: supabaseParams, error } = await supabase
-        .from('parameters')
-        .select('*');
-      
-      console.log('Fetched parameters:', supabaseParams);
-      
-      if (error) {
-        console.error('Error fetching parameters from Supabase:', error);
-        // Fallback to mock data if there's an error
-        const mockParams = getAllParameters();
-        setParameters(mockParams);
-        return;
-      }
+      // Fetch parameters from Supabase
+      const supabaseParams = await fetchParametersFromAPI();
       
       if (supabaseParams && supabaseParams.length > 0) {
         // Transform Supabase data to match Parameter type
         const formattedParams: Parameter[] = supabaseParams.map(p => convertToParameter(p));
         setParameters(formattedParams);
       } else {
-        // Fallback to mock data if no parameters found
-        const mockParams = getAllParameters();
-        setParameters(mockParams);
+        // If no parameters found, set empty array
+        setParameters([]);
       }
     } catch (error) {
       console.error('Error in fetchParameters:', error);
-      // Fallback to mock data on any error
-      const mockParams = getAllParameters();
-      setParameters(mockParams);
+      setParameters([]);
     }
   };
 
+  // This effect updates parameter values with simulated data
   useEffect(() => {
-    if (connectionStatus !== 'normal') return;
+    if (connectionStatus !== 'normal' || parameters.length === 0) return;
     
     const updateInterval = setInterval(() => {
       setParameters(prev => 
@@ -123,7 +109,28 @@ export function usePLCConnection() {
     }, 5000);
     
     return () => clearInterval(updateInterval);
-  }, [connectionStatus]);
+  }, [connectionStatus, parameters.length]);
+
+  // Set up Supabase realtime subscription for parameter changes
+  useEffect(() => {
+    const channel = supabase
+      .channel('public:parameters')
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'parameters' 
+      }, (payload) => {
+        console.log('Database change detected:', payload);
+        
+        // Refetch all parameters when any change occurs
+        fetchParameters();
+      })
+      .subscribe();
+      
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   // Connect to PLC on component mount
   useEffect(() => {
@@ -135,18 +142,7 @@ export function usePLCConnection() {
     setParameters,
     connectionStatus,
     plcSettings,
-    connectToPLC
+    connectToPLC,
+    fetchParameters
   };
 }
-
-// Import this from mockData to avoid circular dependencies
-const getAllParameters = () => {
-  // This is just a placeholder that should be replaced by the actual import
-  // We're doing this to avoid circular dependencies
-  try {
-    return require('@/data/mockData').getAllParameters();
-  } catch (e) {
-    console.error('Error importing mock data:', e);
-    return [];
-  }
-};
