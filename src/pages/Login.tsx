@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useToast } from "@/components/ui/use-toast";
+import { toast } from "sonner";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -27,7 +27,6 @@ type FormValues = z.infer<typeof formSchema>;
 
 const Login = () => {
   const [isLoading, setIsLoading] = useState(false);
-  const { toast } = useToast();
   const navigate = useNavigate();
   const { signIn, isAuthenticated } = useAuthContext();
 
@@ -35,8 +34,8 @@ const Login = () => {
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      email: "aryasingh14600@gmail.com",
-      password: "Arya@123",
+      email: "",
+      password: "",
     },
   });
 
@@ -56,24 +55,21 @@ const Login = () => {
       
       if (error) {
         console.error('Login error:', error.message);
-        toast({
-          variant: "destructive",
-          title: "Login Failed",
+        toast("Login Failed", {
           description: error.message || "Please check your credentials and try again.",
+          variant: "destructive"
         });
       } else {
-        toast({
-          title: "Login Successful",
+        toast("Login Successful", {
           description: "Welcome back!",
         });
         navigate('/dashboard');
       }
     } catch (error: any) {
       console.error('Login exception:', error.message);
-      toast({
-        variant: "destructive",
-        title: "Login Failed",
+      toast("Login Failed", {
         description: error.message || "An unexpected error occurred. Please try again.",
+        variant: "destructive"
       });
     } finally {
       setIsLoading(false);

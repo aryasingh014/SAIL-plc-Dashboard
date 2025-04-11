@@ -103,13 +103,14 @@ export async function deleteParameter(id: string) {
     if (error) {
       console.error('Error deleting parameter:', error);
       toast.error('Failed to delete parameter: ' + error.message);
-      throw error;
+      return false;
     }
 
     toast.success('Parameter deleted successfully');
     return true;
   } catch (error) {
     console.error('Error in deleteParameter:', error);
+    toast.error('Failed to delete parameter');
     return false;
   }
 }

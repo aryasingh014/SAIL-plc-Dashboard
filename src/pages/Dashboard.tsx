@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Button } from "@/components/ui/button";
 import StatusIndicator from '@/components/StatusIndicator';
@@ -10,6 +10,7 @@ import ParameterSelector from '@/components/dashboard/ParameterSelector';
 import ParameterGrid from '@/components/dashboard/ParameterGrid';
 import { usePLCConnection } from '@/hooks/use-plc-connection';
 import { useSystemStatus } from '@/hooks/use-system-status';
+import { supabase } from "@/integrations/supabase/client";
 
 const Dashboard = () => {
   const [selectedParameters, setSelectedParameters] = useState<string[]>([]);
@@ -57,6 +58,24 @@ const Dashboard = () => {
     
     return () => clearInterval(refreshTimer);
   }, [connectionStatus, fetchParameters]);
+
+  // Subscribe to real-time parameter changes
+  useEffect(() => {
+    const channel = supabase
+      .channel('public:parameters')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'parameters'
+      }, () => {
+        fetchParameters();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchParameters]);
 
   return (
     <DashboardLayout>

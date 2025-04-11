@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DashboardLayout from '@/components/layout/DashboardLayout';
@@ -8,15 +9,15 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useToast } from '@/components/ui/use-toast';
+import { toast } from "sonner";
+import { useAuthContext } from '@/context/AuthContext';
 
 const Settings = () => {
-  const [user, setUser] = useState<any>(null);
+  const { profile, loading } = useAuthContext();
   const navigate = useNavigate();
-  const { toast } = useToast();
   
   // PLC Connection settings
-  const [plcIp, setPlcIp] = useState('198.162.0.1');
+  const [plcIp, setPlcIp] = useState('');
   const [plcPort, setPlcPort] = useState('102');
   const [plcProtocol, setPlcProtocol] = useState('opcua');
   const [autoReconnect, setAutoReconnect] = useState(true);
@@ -36,26 +37,25 @@ const Settings = () => {
   const [newRole, setNewRole] = useState('operator');
 
   useEffect(() => {
-    // Check if user is admin
-    const userData = localStorage.getItem('user');
-    if (userData) {
-      const parsedUser = JSON.parse(userData);
-      setUser(parsedUser);
-      
-      if (parsedUser.role !== 'admin') {
-        // Redirect non-admin users
-        toast({
-          variant: "destructive",
-          title: "Access Denied",
-          description: "You need admin privileges to access settings.",
-        });
-        navigate('/dashboard');
-      }
-    } else {
-      // Not logged in
-      navigate('/login');
+    // Load saved settings from localStorage if available
+    const savedSettings = localStorage.getItem('plcSettings');
+    if (savedSettings) {
+      const settings = JSON.parse(savedSettings);
+      setPlcIp(settings.ip || '');
+      setPlcPort(settings.port || '102');
+      setPlcProtocol(settings.protocol || 'opcua');
+      setAutoReconnect(settings.autoReconnect !== undefined ? settings.autoReconnect : true);
     }
-  }, [navigate, toast]);
+    
+    // Check if user is admin
+    if (!loading && profile && profile.role !== 'admin') {
+      // Redirect non-admin users
+      toast("Access Denied", {
+        description: "You need admin privileges to access settings."
+      });
+      navigate('/dashboard');
+    }
+  }, [profile, loading, navigate]);
 
   const handleSaveConnectionSettings = () => {
     // Save PLC connection settings to localStorage
@@ -66,35 +66,31 @@ const Settings = () => {
       autoReconnect
     }));
     
-    toast({
-      title: "Connection Settings Saved",
-      description: "PLC connection settings have been updated.",
+    toast("Connection Settings Saved", {
+      description: "PLC connection settings have been updated."
     });
   };
 
   const handleSaveDataSettings = () => {
-    toast({
-      title: "Data Collection Settings Saved",
-      description: "Data collection settings have been updated.",
+    toast("Data Collection Settings Saved", {
+      description: "Data collection settings have been updated."
     });
   };
 
   const handleAddUser = () => {
     if (!newUsername.trim()) {
-      toast({
-        variant: "destructive",
-        title: "Error",
+      toast("Error", {
         description: "Username cannot be empty",
+        variant: "destructive"
       });
       return;
     }
     
     // Check if username already exists
     if (users.some(user => user.username === newUsername)) {
-      toast({
-        variant: "destructive",
-        title: "Error",
+      toast("Error", {
         description: "Username already exists",
+        variant: "destructive"
       });
       return;
     }
@@ -110,34 +106,55 @@ const Settings = () => {
     
     setNewUsername('');
     
-    toast({
-      title: "User Added",
-      description: `User ${newUsername} has been added with ${newRole} role.`,
+    toast("User Added", {
+      description: `User ${newUsername} has been added with ${newRole} role.`
     });
   };
 
   const handleDeleteUser = (userId: string) => {
     // Prevent deleting your own account
     const userToDelete = users.find(u => u.id === userId);
-    if (userToDelete && userToDelete.username === user?.username) {
-      toast({
-        variant: "destructive",
-        title: "Error",
+    if (userToDelete && userToDelete.username === profile?.username) {
+      toast("Error", {
         description: "You cannot delete your own account",
+        variant: "destructive"
       });
       return;
     }
     
     setUsers(users.filter(user => user.id !== userId));
     
-    toast({
-      title: "User Deleted",
-      description: "User has been removed from the system.",
+    toast("User Deleted", {
+      description: "User has been removed from the system."
     });
   };
 
-  if (!user || user.role !== 'admin') {
-    return null; // Will be redirected by useEffect
+  if (loading) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-[calc(100vh-200px)]">
+          <div className="text-center">
+            <p className="text-lg">Loading settings...</p>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (!profile || profile.role !== 'admin') {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-[calc(100vh-200px)]">
+          <div className="text-center">
+            <h2 className="text-xl font-bold mb-2">Access Denied</h2>
+            <p className="text-muted-foreground">You need admin privileges to access settings.</p>
+            <Button className="mt-4" onClick={() => navigate('/dashboard')}>
+              Back to Dashboard
+            </Button>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
   }
 
   return (
@@ -172,6 +189,7 @@ const Settings = () => {
                     <Input 
                       id="plc-ip" 
                       value={plcIp}
+                      placeholder="Enter IP address"
                       onChange={(e) => setPlcIp(e.target.value)}
                     />
                   </div>
@@ -181,6 +199,7 @@ const Settings = () => {
                     <Input 
                       id="plc-port" 
                       value={plcPort}
+                      placeholder="Enter port number"
                       onChange={(e) => setPlcPort(e.target.value)}
                     />
                   </div>
@@ -280,6 +299,7 @@ const Settings = () => {
                     <Input 
                       id="new-username" 
                       value={newUsername}
+                      placeholder="Enter username"
                       onChange={(e) => setNewUsername(e.target.value)}
                     />
                   </div>
