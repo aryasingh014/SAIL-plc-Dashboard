@@ -26,8 +26,7 @@ const UserManagement = () => {
 
   const handleAddUser = () => {
     if (!newUsername.trim()) {
-      toast({
-        title: "Error",
+      toast("Error", {
         description: "Username cannot be empty"
       });
       return;
@@ -35,8 +34,7 @@ const UserManagement = () => {
     
     // Check if username already exists
     if (users.some(user => user.username === newUsername)) {
-      toast({
-        title: "Error",
+      toast("Error", {
         description: "Username already exists"
       });
       return;
@@ -53,8 +51,7 @@ const UserManagement = () => {
     
     setNewUsername('');
     
-    toast({
-      title: "User Added",
+    toast("User Added", {
       description: `User ${newUsername} has been added with ${newRole} role.`
     });
   };
@@ -63,8 +60,7 @@ const UserManagement = () => {
     // Prevent deleting your own account
     const userToDelete = users.find(u => u.id === userId);
     if (userToDelete && userToDelete.username === profile?.username) {
-      toast({
-        title: "Error",
+      toast("Error", {
         description: "You cannot delete your own account"
       });
       return;
@@ -72,8 +68,7 @@ const UserManagement = () => {
     
     setUsers(users.filter(user => user.id !== userId));
     
-    toast({
-      title: "User Deleted",
+    toast("User Deleted", {
       description: "User has been removed from the system."
     });
   };

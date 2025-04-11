@@ -55,21 +55,18 @@ const Login = () => {
       
       if (error) {
         console.error('Login error:', error.message);
-        toast({
-          title: "Login Failed",
+        toast("Login Failed", {
           description: error.message || "Please check your credentials and try again."
         });
       } else {
-        toast({
-          title: "Login Successful",
+        toast("Login Successful", {
           description: "Welcome back!"
         });
         navigate('/dashboard');
       }
     } catch (error: any) {
       console.error('Login exception:', error.message);
-      toast({
-        title: "Login Failed",
+      toast("Login Failed", {
         description: error.message || "An unexpected error occurred. Please try again."
       });
     } finally {
