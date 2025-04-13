@@ -80,8 +80,7 @@ export function usePLCConnection() {
     
     setConnectionStatus('connecting');
     
-    toast({
-      title: "Connecting to PLC",
+    toast("Connecting to PLC", {
       description: `Attempting to connect to SAIL PLC at ${plcSettings.ip}:${plcSettings.port} using ${plcSettings.protocol.toUpperCase()}...`,
     });
     
@@ -104,10 +103,9 @@ export function usePLCConnection() {
         if (socket.readyState !== WebSocket.OPEN) {
           socket.close();
           setConnectionStatus('disconnected');
-          toast({
-            variant: "destructive",
-            title: "Connection Timeout",
+          toast("Connection Timeout", {
             description: `Failed to connect to SAIL PLC at ${plcSettings.ip}. Connection timed out.`,
+            variant: "destructive"
           });
           connectionAttemptRef.current = false;
           
@@ -123,8 +121,7 @@ export function usePLCConnection() {
       socket.onopen = () => {
         clearTimeout(connectionTimeout);
         setConnectionStatus('normal');
-        toast({
-          title: "Connected to PLC",
+        toast("Connected to PLC", {
           description: `Successfully connected to the SAIL PLC at ${plcSettings.ip}.`,
         });
         
@@ -186,10 +183,9 @@ export function usePLCConnection() {
         clearTimeout(connectionTimeout);
         console.error('WebSocket error:', error);
         setConnectionStatus('disconnected');
-        toast({
-          variant: "destructive",
-          title: "Connection Failed",
+        toast("Connection Failed", {
           description: `Failed to connect to SAIL PLC at ${plcSettings.ip}. Please check connection settings and ensure Ethernet is connected.`,
+          variant: "destructive"
         });
         connectionAttemptRef.current = false;
         
@@ -219,10 +215,9 @@ export function usePLCConnection() {
     } catch (error) {
       console.error('Error establishing WebSocket connection:', error);
       setConnectionStatus('disconnected');
-      toast({
-        variant: "destructive",
-        title: "Connection Failed",
+      toast("Connection Failed", {
         description: `Failed to connect to SAIL PLC at ${plcSettings.ip}. Please check connection settings and ensure Ethernet is connected.`,
+        variant: "destructive"
       });
       connectionAttemptRef.current = false;
       

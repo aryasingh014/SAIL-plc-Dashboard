@@ -1,10 +1,9 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getAllParameters } from '@/data/mockData';
-import { Parameter, ParameterHistoryEntry } from '@/types/parameter';
+import { Parameter, ParameterHistoryEntry, ParameterStatus } from '@/types/parameter';
 import { Calendar as CalendarIcon } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
@@ -12,13 +11,14 @@ import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { CheckCircle, AlertTriangle, AlertCircle } from 'lucide-react';
-import { fetchParameterHistory } from '@/lib/parameters';
+import { fetchParameterHistory, fetchParameters } from '@/lib/parameters';
 import { supabase } from '@/integrations/supabase/client';
+import { convertToParameter } from '@/lib/parameters';
 
 interface HistoryDataEntry {
   parameter_id: string;
   value: number;
-  status: string;
+  status: ParameterStatus;
   timestamp: string;
 }
 
@@ -35,37 +35,10 @@ const History = () => {
   useEffect(() => {
     const fetchAllParameters = async () => {
       try {
-        const { data, error } = await supabase
-          .from('parameters')
-          .select('*');
+        const supabaseParams = await fetchParameters();
         
-        if (error) {
-          console.error('Error fetching parameters:', error);
-          throw error;
-        }
-        
-        if (data) {
-          const parsedParams = data.map(p => ({
-            id: p.id,
-            name: p.name,
-            description: `${p.name} parameter`,
-            unit: p.unit || '',
-            value: p.value,
-            status: p.status || 'normal',
-            thresholds: {
-              warning: {
-                min: p.min_value || null,
-                max: p.max_value || null
-              },
-              alarm: {
-                min: p.min_value ? p.min_value * 0.9 : null,
-                max: p.max_value ? p.max_value * 1.1 : null
-              }
-            },
-            timestamp: p.updated_at || new Date().toISOString(),
-            category: 'Custom'
-          }));
-          
+        if (supabaseParams && supabaseParams.length > 0) {
+          const parsedParams = supabaseParams.map(p => convertToParameter(p));
           setParameters(parsedParams);
           
           // By default, select the first parameter
@@ -101,23 +74,21 @@ const History = () => {
       setLoading(true);
       
       try {
-        // Check if parameter_history table exists
-        const { data, error } = await supabase
-          .from('parameter_history')
-          .select('*')
-          .in('parameter_id', selectedParameters)
-          .gte('timestamp', startDate.toISOString())
-          .lte('timestamp', endDate.toISOString())
-          .order('timestamp', { ascending: true });
+        // Fetch history data for each selected parameter
+        let allHistoryData: HistoryDataEntry[] = [];
         
-        if (error) {
-          console.error('Error fetching parameter history:', error);
-          throw error;
+        for (const parameterId of selectedParameters) {
+          const parameterHistory = await fetchParameterHistory(parameterId);
+          allHistoryData = [...allHistoryData, ...parameterHistory];
         }
         
-        if (data) {
-          setHistoryData(data);
-        }
+        // Filter by date range
+        const filteredHistoryData = allHistoryData.filter(entry => {
+          const entryDate = new Date(entry.timestamp);
+          return entryDate >= startDate && entryDate <= endDate;
+        });
+        
+        setHistoryData(filteredHistoryData);
       } catch (error) {
         console.error('Error loading parameter history:', error);
         // If table doesn't exist or another error occurs, use mock data
@@ -133,7 +104,7 @@ const History = () => {
             
             for (let time = start; time <= end; time += step) {
               const value = parameter.value * (0.8 + Math.random() * 0.4); // Random value around parameter.value
-              let status = 'normal';
+              let status: ParameterStatus = 'normal';
               
               if (
                 (parameter.thresholds.alarm.min !== null && value < parameter.thresholds.alarm.min) ||

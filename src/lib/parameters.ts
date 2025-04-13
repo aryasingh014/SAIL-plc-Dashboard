@@ -19,7 +19,8 @@ export async function fetchParameters() {
     const { data, error } = await supabase
       .from('parameters')
       .select('*')
-      .is('user_id', null).or('user_id.not.like.%history_%');
+      .is('user_id', null)
+      .or('user_id.not.is.null');
     
     if (error) {
       console.error('Error fetching parameters:', error);
