@@ -78,7 +78,7 @@ const Login = () => {
     <div className="h-screen w-full flex items-center justify-center bg-gradient-to-br from-blue-900 to-blue-700">
       <Card className="w-[400px] shadow-xl">
         <CardHeader className="space-y-1 text-center">
-          <CardTitle className="text-2xl font-bold">Nexus PLC Visualizer</CardTitle>
+          <CardTitle className="text-2xl font-bold">SAIL PLC Visualizer</CardTitle>
           <CardDescription>Login to access the dashboard</CardDescription>
         </CardHeader>
         <CardContent>

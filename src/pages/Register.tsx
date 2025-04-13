@@ -87,7 +87,7 @@ const Register = () => {
       <Card className="w-[400px] shadow-xl">
         <CardHeader className="space-y-1 text-center">
           <CardTitle className="text-2xl font-bold">Create an Account</CardTitle>
-          <CardDescription>Register to access the Nexus PLC Visualizer</CardDescription>
+          <CardDescription>Register to access the SAIL PLC Visualizer</CardDescription>
         </CardHeader>
         <CardContent>
           <Form {...form}>
