@@ -52,3 +52,13 @@ export interface PLCConnectionSettings {
   protocol: 'opcua' | 'modbus' | 'ethernet-ip' | 'snap7' | 's7comm';
   autoReconnect: boolean;
 }
+
+// For database compatibility
+export interface ParameterHistoryRecord {
+  id?: string;
+  parameter_id: string;
+  value: number;
+  status: string;
+  timestamp: string;
+  created_at?: string;
+}

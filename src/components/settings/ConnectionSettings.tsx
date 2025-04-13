@@ -31,6 +31,7 @@ interface ConnectionSettingsProps {
 
 const ConnectionSettings: React.FC<ConnectionSettingsProps> = ({ initialSettings }) => {
   const [isSaving, setIsSaving] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
 
   // Load saved settings from localStorage
   const loadSavedSettings = (): ConnectionSettingsFormValues => {
@@ -82,9 +83,6 @@ const ConnectionSettings: React.FC<ConnectionSettingsProps> = ({ initialSettings
     setIsSaving(true);
     
     try {
-      // Simulate API call with delay
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
       // Save to localStorage
       localStorage.setItem('plcSettings', JSON.stringify(data));
       
@@ -97,6 +95,51 @@ const ConnectionSettings: React.FC<ConnectionSettingsProps> = ({ initialSettings
       });
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleTestConnection = async () => {
+    const formData = form.getValues();
+    setIsConnecting(true);
+    
+    try {
+      // In a real implementation, you would use an actual endpoint
+      const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${wsProtocol}//${formData.ip}:${formData.port}`;
+      
+      // Create a WebSocket connection
+      const socket = new WebSocket(wsUrl);
+      
+      // Set timeout for connection
+      const connectionTimeout = setTimeout(() => {
+        socket.close();
+        throw new Error('Connection timed out');
+      }, 5000);
+      
+      // Promise to handle connection
+      await new Promise<void>((resolve, reject) => {
+        socket.onopen = () => {
+          clearTimeout(connectionTimeout);
+          socket.close();
+          resolve();
+        };
+        
+        socket.onerror = (error) => {
+          clearTimeout(connectionTimeout);
+          reject(error);
+        };
+      });
+      
+      toast("Connection Successful", {
+        description: `Successfully connected to PLC at ${formData.ip}:${formData.port}`
+      });
+    } catch (error) {
+      console.error('Connection test failed:', error);
+      toast("Connection Failed", {
+        description: `Could not connect to PLC at ${formData.ip}:${formData.port}. Please check your settings and ensure the PLC is accessible.`
+      });
+    } finally {
+      setIsConnecting(false);
     }
   };
 
@@ -122,7 +165,7 @@ const ConnectionSettings: React.FC<ConnectionSettingsProps> = ({ initialSettings
                       <Input {...field} placeholder="192.168.1.1" />
                     </FormControl>
                     <FormDescription>
-                      The IP address of the PLC device
+                      IP address of the PLC device
                     </FormDescription>
                   </FormItem>
                 )}
@@ -137,7 +180,7 @@ const ConnectionSettings: React.FC<ConnectionSettingsProps> = ({ initialSettings
                       <Input {...field} placeholder="502" />
                     </FormControl>
                     <FormDescription>
-                      The port used for communication
+                      Communication port number
                     </FormDescription>
                   </FormItem>
                 )}
@@ -196,9 +239,31 @@ const ConnectionSettings: React.FC<ConnectionSettingsProps> = ({ initialSettings
               />
             </div>
             
-            <Button type="submit" disabled={isSaving}>
-              {isSaving ? "Saving..." : "Save Settings"}
-            </Button>
+            <div className="flex gap-3">
+              <Button type="submit" disabled={isSaving}>
+                {isSaving ? "Saving..." : "Save Settings"}
+              </Button>
+              
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={handleTestConnection}
+                disabled={isConnecting}
+              >
+                {isConnecting ? "Testing..." : "Test Connection"}
+              </Button>
+            </div>
+            
+            <div className="mt-4 p-3 bg-muted rounded text-sm">
+              <p><strong>Connection Guide:</strong></p>
+              <ul className="list-disc pl-5 space-y-1 mt-2">
+                <li>For Modbus TCP, default port is typically 502</li>
+                <li>For OPC UA, default port is typically 4840</li>
+                <li>For Ethernet/IP, default port is typically 44818</li>
+                <li>For S7 protocols, default port is typically 102</li>
+                <li>Ensure your PLC has the appropriate communication modules enabled</li>
+              </ul>
+            </div>
           </form>
         </Form>
       </CardContent>

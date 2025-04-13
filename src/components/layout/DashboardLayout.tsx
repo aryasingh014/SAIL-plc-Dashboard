@@ -43,36 +43,24 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
     return (
       <div className="h-screen flex flex-col bg-background">
         {/* Mobile header */}
-        <header className="border-b border-border py-3 px-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+        <header className="border-b border-border py-2 px-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
             <Drawer open={openMobile} onOpenChange={setOpenMobile}>
               <DrawerTrigger asChild>
-                <Button variant="outline" size="icon">
+                <Button variant="ghost" size="icon">
                   <Menu className="h-5 w-5" />
                 </Button>
               </DrawerTrigger>
               <DrawerContent className="h-[85%]">
-                <div className="px-4 py-6">
-                  <div className="mb-6">
-                    <h1 className="text-2xl font-bold">Nexus PLC</h1>
-                    <p className="text-sm opacity-70">Visualization Dashboard</p>
+                <div className="px-4 py-4">
+                  <div className="mb-4">
+                    <h1 className="text-xl font-bold">SAIL PLC</h1>
+                    <p className="text-sm opacity-70">Monitoring System</p>
                   </div>
                   
-                  <div className="p-4 bg-industrial-blue-light/20 rounded-lg mb-4">
-                    <div className="flex items-center space-x-2">
-                      <div className="h-8 w-8 rounded-full bg-industrial-blue flex items-center justify-center text-white">
-                        {profile?.username ? profile.username.charAt(0).toUpperCase() : '?'}
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium">{profile?.username || 'User'}</p>
-                        <p className="text-xs opacity-70 capitalize">{profile?.role || 'operator'}</p>
-                      </div>
-                    </div>
-                  </div>
+                  <Separator className="my-3" />
                   
-                  <Separator className="my-4" />
-                  
-                  <nav className="space-y-2">
+                  <nav className="space-y-1">
                     <Link to="/dashboard">
                       <Button variant="ghost" className="w-full justify-start" onClick={() => setOpenMobile(false)}>
                         <LayoutDashboard className="mr-2 h-4 w-4" />
@@ -107,7 +95,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
                     )}
                   </nav>
                   
-                  <Separator className="my-4" />
+                  <Separator className="my-3" />
                   
                   <Button variant="ghost" className="w-full justify-start" onClick={handleLogout}>
                     <LogOut className="mr-2 h-4 w-4" />
@@ -116,12 +104,12 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
                 </div>
               </DrawerContent>
             </Drawer>
-            <h1 className="text-lg font-semibold">Nexus PLC</h1>
+            <h1 className="text-base font-semibold">SAIL PLC</h1>
           </div>
         </header>
         
         {/* Main content */}
-        <div className="flex-1 overflow-auto">
+        <div className="flex-1 overflow-auto p-3">
           {children}
         </div>
       </div>
@@ -135,20 +123,8 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
         <Sidebar variant="sidebar" collapsible="offcanvas">
           <SidebarHeader>
             <div className="p-2">
-              <h1 className="text-lg font-bold">Nexus PLC</h1>
-              <p className="text-xs opacity-70">Visualization Dashboard</p>
-            </div>
-            
-            <div className="p-2 bg-sidebar-accent/20 rounded-md">
-              <div className="flex items-center space-x-2">
-                <div className="h-7 w-7 rounded-full bg-sidebar-accent/20 flex items-center justify-center">
-                  {profile?.username ? profile.username.charAt(0).toUpperCase() : '?'}
-                </div>
-                <div>
-                  <p className="text-sm font-medium">{profile?.username || 'User'}</p>
-                  <p className="text-xs opacity-70 capitalize">{profile?.role || 'operator'}</p>
-                </div>
-              </div>
+              <h1 className="text-lg font-bold">SAIL PLC</h1>
+              <p className="text-xs opacity-70">Monitoring System</p>
             </div>
           </SidebarHeader>
           
@@ -208,12 +184,12 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
         </Sidebar>
         
         <SidebarInset>
-          <header className="border-b py-3 px-4 hidden md:flex items-center">
+          <header className="border-b py-2 px-4 hidden md:flex items-center">
             <SidebarTrigger />
-            <h2 className="ml-2 text-lg font-semibold">Visualization Dashboard</h2>
+            <h2 className="ml-2 text-base font-medium">SAIL PLC Monitoring</h2>
           </header>
           
-          <div className="overflow-auto p-4 h-[calc(100vh-56px)]">
+          <div className="overflow-auto p-4 h-[calc(100vh-48px)]">
             {children}
           </div>
         </SidebarInset>

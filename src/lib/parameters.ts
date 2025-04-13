@@ -1,6 +1,6 @@
 
 import { supabase } from "@/integrations/supabase/client";
-import { Parameter } from "@/types/parameter";
+import { Parameter, ParameterHistoryRecord } from "@/types/parameter";
 import { toast } from "sonner";
 
 export interface ParameterData {
@@ -14,18 +14,12 @@ export interface ParameterData {
   user_id?: string;
 }
 
-export interface ParameterHistoryData {
-  parameter_id: string;
-  value: number;
-  status: string;
-  timestamp: string;
-}
-
 export async function fetchParameters() {
   try {
     const { data, error } = await supabase
       .from('parameters')
-      .select('*');
+      .select('*')
+      .is('user_id', null).or('user_id.not.like.%history_%');
     
     if (error) {
       console.error('Error fetching parameters:', error);
@@ -42,11 +36,13 @@ export async function fetchParameters() {
 
 export async function fetchParameterHistory(parameterId: string) {
   try {
+    // Instead of using parameter_history table which doesn't exist,
+    // use the parameters table with the user_id field to identify history records
     const { data, error } = await supabase
-      .from('parameter_history')
+      .from('parameters')
       .select('*')
-      .eq('parameter_id', parameterId)
-      .order('timestamp', { ascending: false })
+      .eq('user_id', parameterId)
+      .order('created_at', { ascending: false })
       .limit(100);
     
     if (error) {
@@ -54,7 +50,15 @@ export async function fetchParameterHistory(parameterId: string) {
       throw error;
     }
 
-    return data || [];
+    // Transform the data to match the expected format
+    const historyData = data.map(record => ({
+      timestamp: record.created_at,
+      value: record.value,
+      status: record.status || 'normal',
+      parameter_id: record.user_id
+    }));
+
+    return historyData || [];
   } catch (error) {
     console.error('Error in fetchParameterHistory:', error);
     return [];
@@ -127,6 +131,17 @@ export async function updateParameter(id: string, parameter: Partial<ParameterDa
 
 export async function deleteParameter(id: string) {
   try {
+    // First delete any history entries for this parameter
+    const { error: historyError } = await supabase
+      .from('parameters')
+      .delete()
+      .eq('user_id', id);
+    
+    if (historyError) {
+      console.error('Error deleting parameter history:', historyError);
+    }
+    
+    // Then delete the parameter itself
     const { error } = await supabase
       .from('parameters')
       .delete()
@@ -149,11 +164,19 @@ export async function deleteParameter(id: string) {
   }
 }
 
-export async function addParameterHistoryEntry(entry: ParameterHistoryData) {
+export async function addParameterHistoryEntry(record: ParameterHistoryRecord) {
   try {
+    // Store history as a parameter record with user_id field containing the original parameter id
     const { error } = await supabase
-      .from('parameter_history')
-      .insert(entry);
+      .from('parameters')
+      .insert({
+        name: `history_${record.parameter_id}`, 
+        value: record.value,
+        status: record.status,
+        unit: '', // Placeholder value
+        user_id: record.parameter_id, // Using user_id to reference the original parameter
+        created_at: record.timestamp
+      });
     
     if (error) {
       console.error('Error adding parameter history entry:', error);
