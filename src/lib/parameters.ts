@@ -1,6 +1,6 @@
 
 import { supabase } from "@/integrations/supabase/client";
-import { Parameter, ParameterHistoryRecord } from "@/types/parameter";
+import { Parameter, ParameterHistoryRecord, ParameterStatus } from "@/types/parameter";
 import { toast } from "sonner";
 
 export interface ParameterData {
@@ -10,7 +10,7 @@ export interface ParameterData {
   unit: string;
   min_value: number | null;
   max_value: number | null;
-  status?: string;
+  status?: ParameterStatus;
   user_id?: string;
 }
 
@@ -36,8 +36,7 @@ export async function fetchParameters() {
 
 export async function fetchParameterHistory(parameterId: string) {
   try {
-    // Instead of using parameter_history table which doesn't exist,
-    // use the parameters table with the user_id field to identify history records
+    // Use the parameters table with the user_id field to identify history records
     const { data, error } = await supabase
       .from('parameters')
       .select('*')
@@ -52,10 +51,10 @@ export async function fetchParameterHistory(parameterId: string) {
 
     // Transform the data to match the expected format
     const historyData = data.map(record => ({
-      timestamp: record.created_at,
+      parameter_id: record.user_id,
       value: record.value,
-      status: record.status || 'normal',
-      parameter_id: record.user_id
+      status: record.status as ParameterStatus,
+      timestamp: record.created_at || new Date().toISOString()
     }));
 
     return historyData || [];
@@ -197,7 +196,7 @@ export function convertToParameter(data: any): Parameter {
     description: `${data.name} parameter`,
     unit: data.unit || '',
     value: data.value,
-    status: data.status || 'normal',
+    status: (data.status as ParameterStatus) || 'normal',
     thresholds: {
       warning: {
         min: data.min_value || null,
@@ -209,6 +208,6 @@ export function convertToParameter(data: any): Parameter {
       }
     },
     timestamp: data.updated_at || new Date().toISOString(),
-    category: 'Custom'
+    category: 'SAIL Data'
   };
 }

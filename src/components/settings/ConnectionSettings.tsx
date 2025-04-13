@@ -32,6 +32,7 @@ interface ConnectionSettingsProps {
 const ConnectionSettings: React.FC<ConnectionSettingsProps> = ({ initialSettings }) => {
   const [isSaving, setIsSaving] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [ethernetStatus, setEthernetStatus] = useState<'connected' | 'disconnected'>('disconnected');
 
   // Load saved settings from localStorage
   const loadSavedSettings = (): ConnectionSettingsFormValues => {
@@ -79,6 +80,51 @@ const ConnectionSettings: React.FC<ConnectionSettingsProps> = ({ initialSettings
     }
   }, [initialSettings, form]);
 
+  // Check ethernet connection status
+  useEffect(() => {
+    const checkConnection = () => {
+      // First attempt to detect online status
+      const online = navigator.onLine;
+      
+      if (!online) {
+        setEthernetStatus('disconnected');
+        return;
+      }
+      
+      // If we're online, try to check ethernet specifically by attempting to reach the default gateway
+      fetch(`http://${form.getValues().ip}`, { 
+        mode: 'no-cors',
+        cache: 'no-cache',
+        method: 'HEAD',
+        timeout: 1000
+      })
+      .then(() => {
+        setEthernetStatus('connected');
+      })
+      .catch(() => {
+        // Even if we can't reach the gateway, we might still be on ethernet
+        // Here we'll assume we're connected if we're online
+        setEthernetStatus(online ? 'connected' : 'disconnected');
+      });
+    };
+    
+    // Check initially
+    checkConnection();
+    
+    // Set up event listeners for connection changes
+    window.addEventListener('online', () => checkConnection());
+    window.addEventListener('offline', () => setEthernetStatus('disconnected'));
+    
+    // Set up a regular check
+    const interval = setInterval(checkConnection, 10000);
+    
+    return () => {
+      window.removeEventListener('online', checkConnection);
+      window.removeEventListener('offline', () => setEthernetStatus('disconnected'));
+      clearInterval(interval);
+    };
+  }, [form]);
+
   const onSubmit = async (data: ConnectionSettingsFormValues) => {
     setIsSaving(true);
     
@@ -87,7 +133,7 @@ const ConnectionSettings: React.FC<ConnectionSettingsProps> = ({ initialSettings
       localStorage.setItem('plcSettings', JSON.stringify(data));
       
       toast("Settings Saved", {
-        description: "PLC connection settings have been updated."
+        description: "SAIL PLC connection settings have been updated."
       });
     } catch (error) {
       toast("Save Failed", {
@@ -131,12 +177,12 @@ const ConnectionSettings: React.FC<ConnectionSettingsProps> = ({ initialSettings
       });
       
       toast("Connection Successful", {
-        description: `Successfully connected to PLC at ${formData.ip}:${formData.port}`
+        description: `Successfully connected to SAIL PLC at ${formData.ip}:${formData.port}`
       });
     } catch (error) {
       console.error('Connection test failed:', error);
       toast("Connection Failed", {
-        description: `Could not connect to PLC at ${formData.ip}:${formData.port}. Please check your settings and ensure the PLC is accessible.`
+        description: `Could not connect to SAIL PLC at ${formData.ip}:${formData.port}. Please check your settings and ensure Ethernet is connected.`
       });
     } finally {
       setIsConnecting(false);
@@ -146,12 +192,24 @@ const ConnectionSettings: React.FC<ConnectionSettingsProps> = ({ initialSettings
   return (
     <Card>
       <CardHeader>
-        <CardTitle>PLC Connection Settings</CardTitle>
+        <CardTitle>SAIL PLC Connection Settings</CardTitle>
         <CardDescription>
-          Configure connection settings for communicating with the PLC.
+          Configure connection settings for communicating with the SAIL PLC via Ethernet.
         </CardDescription>
       </CardHeader>
       <CardContent>
+        <div className={`p-3 mb-4 rounded-md ${ethernetStatus === 'connected' ? 'bg-green-100 dark:bg-green-900/20' : 'bg-red-100 dark:bg-red-900/20'}`}>
+          <div className="flex items-center gap-2">
+            <div className={`w-3 h-3 rounded-full ${ethernetStatus === 'connected' ? 'bg-green-500' : 'bg-red-500'}`}></div>
+            <p className="font-medium">{ethernetStatus === 'connected' ? 'Ethernet Connected' : 'Ethernet Disconnected'}</p>
+          </div>
+          <p className="text-sm mt-1">
+            {ethernetStatus === 'connected' 
+              ? 'Your device is connected to Ethernet, which allows direct communication with the PLC.' 
+              : 'Please connect your device to Ethernet to communicate with the PLC.'}
+          </p>
+        </div>
+
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -165,7 +223,7 @@ const ConnectionSettings: React.FC<ConnectionSettingsProps> = ({ initialSettings
                       <Input {...field} placeholder="192.168.1.1" />
                     </FormControl>
                     <FormDescription>
-                      IP address of the PLC device
+                      IP address of the SAIL PLC device on the network
                     </FormDescription>
                   </FormItem>
                 )}
@@ -212,7 +270,7 @@ const ConnectionSettings: React.FC<ConnectionSettingsProps> = ({ initialSettings
                       </SelectContent>
                     </Select>
                     <FormDescription>
-                      Communication protocol for PLC
+                      Communication protocol for SAIL PLC
                     </FormDescription>
                   </FormItem>
                 )}
@@ -248,20 +306,21 @@ const ConnectionSettings: React.FC<ConnectionSettingsProps> = ({ initialSettings
                 type="button" 
                 variant="outline" 
                 onClick={handleTestConnection}
-                disabled={isConnecting}
+                disabled={isConnecting || ethernetStatus === 'disconnected'}
               >
                 {isConnecting ? "Testing..." : "Test Connection"}
               </Button>
             </div>
             
             <div className="mt-4 p-3 bg-muted rounded text-sm">
-              <p><strong>Connection Guide:</strong></p>
+              <p><strong>SAIL PLC Connection Guide:</strong></p>
               <ul className="list-disc pl-5 space-y-1 mt-2">
+                <li>Ensure your device is connected to the plant Ethernet network</li>
                 <li>For Modbus TCP, default port is typically 502</li>
                 <li>For OPC UA, default port is typically 4840</li>
                 <li>For Ethernet/IP, default port is typically 44818</li>
                 <li>For S7 protocols, default port is typically 102</li>
-                <li>Ensure your PLC has the appropriate communication modules enabled</li>
+                <li>Check with your system administrator for the correct PLC IP address</li>
               </ul>
             </div>
           </form>

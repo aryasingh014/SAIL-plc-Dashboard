@@ -1,9 +1,9 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Parameter, StatusType, PLCConnectionSettings, ParameterHistoryRecord } from '@/types/parameter';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
-import { convertToParameter, fetchParameters as fetchParametersFromAPI } from '@/lib/parameters';
+import { convertToParameter, fetchParameters as fetchParametersFromAPI, addParameterHistoryEntry } from '@/lib/parameters';
 
 export function usePLCConnection() {
   const [parameters, setParameters] = useState<Parameter[]>([]);
@@ -14,11 +14,12 @@ export function usePLCConnection() {
     protocol: 'modbus',
     autoReconnect: true
   });
-  const { toast } = useToast();
+  
   const connectionAttemptRef = useRef(false);
   const updateIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const subscriptionRef = useRef<{ unsubscribe: () => void } | null>(null);
   const plcSocketRef = useRef<WebSocket | null>(null);
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchParameters = useCallback(async () => {
     try {
@@ -30,7 +31,6 @@ export function usePLCConnection() {
         const formattedParams: Parameter[] = supabaseParams.map(p => convertToParameter(p));
         setParameters(formattedParams);
       } else {
-        // If no parameters found, set empty array
         setParameters([]);
       }
     } catch (error) {
@@ -49,23 +49,8 @@ export function usePLCConnection() {
         timestamp: new Date().toISOString()
       };
       
-      // Using parameters table directly to avoid table creation issues
-      // This stores history data in the same table with a reference to the parameter
-      const { error } = await supabase
-        .from('parameters')
-        .insert({
-          name: `history_${parameter.name}`,
-          value: parameter.value,
-          unit: parameter.unit,
-          status: parameter.status,
-          user_id: parameter.id, // Use this field to reference the original parameter
-          min_value: null,
-          max_value: null
-        });
-        
-      if (error) {
-        console.error('Error saving parameter history:', error);
-      }
+      // Save history data
+      await addParameterHistoryEntry(historyRecord);
     } catch (error) {
       console.error('Error in saveParameterHistory:', error);
     }
@@ -76,10 +61,18 @@ export function usePLCConnection() {
     if (connectionAttemptRef.current) return;
     connectionAttemptRef.current = true;
     
+    // Clear any existing reconnect timeout
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+    
+    // Load latest settings from localStorage
     const savedSettings = localStorage.getItem('plcSettings');
     if (savedSettings) {
       try {
-        setPlcSettings(JSON.parse(savedSettings));
+        const parsedSettings = JSON.parse(savedSettings);
+        setPlcSettings(parsedSettings);
       } catch (e) {
         console.error('Failed to parse PLC settings', e);
       }
@@ -89,7 +82,7 @@ export function usePLCConnection() {
     
     toast({
       title: "Connecting to PLC",
-      description: `Attempting to connect to PLC at ${plcSettings.ip}:${plcSettings.port} using ${plcSettings.protocol.toUpperCase()}...`,
+      description: `Attempting to connect to SAIL PLC at ${plcSettings.ip}:${plcSettings.port} using ${plcSettings.protocol.toUpperCase()}...`,
     });
     
     // Close existing WebSocket connection if any
@@ -98,22 +91,41 @@ export function usePLCConnection() {
       plcSocketRef.current = null;
     }
     
-    // For real PLC connection, we would use a WebSocket or a dedicated library
-    // This is a simplified example using WebSocket
+    // For real PLC connection via Ethernet
     try {
-      // In a real implementation, you would use an actual endpoint
-      // The URL below is just a placeholder for demonstration
+      // Create a WebSocket connection to the PLC
       const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const wsUrl = `${wsProtocol}//${plcSettings.ip}:${plcSettings.port}`;
       
-      // Create a WebSocket connection
       const socket = new WebSocket(wsUrl);
       
+      // Set connection timeout
+      const connectionTimeout = setTimeout(() => {
+        if (socket.readyState !== WebSocket.OPEN) {
+          socket.close();
+          setConnectionStatus('disconnected');
+          toast({
+            variant: "destructive",
+            title: "Connection Timeout",
+            description: `Failed to connect to SAIL PLC at ${plcSettings.ip}. Connection timed out.`,
+          });
+          connectionAttemptRef.current = false;
+          
+          // Auto reconnect if enabled
+          if (plcSettings.autoReconnect) {
+            reconnectTimeoutRef.current = setTimeout(() => {
+              connectToPLC();
+            }, 10000); // Try to reconnect after 10 seconds
+          }
+        }
+      }, 5000);
+      
       socket.onopen = () => {
+        clearTimeout(connectionTimeout);
         setConnectionStatus('normal');
         toast({
           title: "Connected to PLC",
-          description: `Successfully established connection to the PLC at ${plcSettings.ip}.`,
+          description: `Successfully connected to the SAIL PLC at ${plcSettings.ip}.`,
         });
         
         // Send a connection message with the selected protocol
@@ -149,12 +161,17 @@ export function usePLCConnection() {
                     status = 'warning';
                   }
                   
-                  return {
+                  const updatedParameter = {
                     ...parameter,
                     value: updatedParam.value,
                     status,
                     timestamp: new Date().toISOString()
                   };
+                  
+                  // Save history for real parameters
+                  saveParameterHistory(updatedParameter);
+                  
+                  return updatedParameter;
                 }
                 return parameter;
               })
@@ -166,26 +183,35 @@ export function usePLCConnection() {
       };
       
       socket.onerror = (error) => {
+        clearTimeout(connectionTimeout);
         console.error('WebSocket error:', error);
         setConnectionStatus('disconnected');
         toast({
           variant: "destructive",
           title: "Connection Failed",
-          description: `Failed to connect to PLC at ${plcSettings.ip}. Please check connection settings.`,
+          description: `Failed to connect to SAIL PLC at ${plcSettings.ip}. Please check connection settings and ensure Ethernet is connected.`,
         });
         connectionAttemptRef.current = false;
+        
+        // Auto reconnect if enabled
+        if (plcSettings.autoReconnect) {
+          reconnectTimeoutRef.current = setTimeout(() => {
+            connectToPLC();
+          }, 10000); // Try to reconnect after 10 seconds
+        }
       };
       
       socket.onclose = () => {
+        clearTimeout(connectionTimeout);
         console.log('WebSocket connection closed');
         setConnectionStatus('disconnected');
         connectionAttemptRef.current = false;
         
         // Auto reconnect if enabled
         if (plcSettings.autoReconnect) {
-          setTimeout(() => {
+          reconnectTimeoutRef.current = setTimeout(() => {
             connectToPLC();
-          }, 5000); // Try to reconnect after 5 seconds
+          }, 10000); // Try to reconnect after 10 seconds
         }
       };
       
@@ -196,11 +222,18 @@ export function usePLCConnection() {
       toast({
         variant: "destructive",
         title: "Connection Failed",
-        description: `Failed to connect to PLC at ${plcSettings.ip}. Please check connection settings.`,
+        description: `Failed to connect to SAIL PLC at ${plcSettings.ip}. Please check connection settings and ensure Ethernet is connected.`,
       });
       connectionAttemptRef.current = false;
+      
+      // Auto reconnect if enabled
+      if (plcSettings.autoReconnect) {
+        reconnectTimeoutRef.current = setTimeout(() => {
+          connectToPLC();
+        }, 10000); // Try to reconnect after 10 seconds
+      }
     }
-  }, [plcSettings, toast, fetchParameters]);
+  }, [plcSettings, saveParameterHistory]);
 
   // Set up Supabase realtime subscription for parameter changes
   useEffect(() => {
@@ -210,27 +243,27 @@ export function usePLCConnection() {
       subscriptionRef.current = null;
     }
     
+    let debounceTimer: NodeJS.Timeout | null = null;
+    
     const channel = supabase
       .channel('public:parameters')
       .on('postgres_changes', { 
         event: '*', 
         schema: 'public', 
         table: 'parameters' 
-      }, (payload) => {
-        console.log('Database change detected:', payload);
-        
+      }, () => {
         // Debounce multiple rapid updates
-        const debounceTimer = setTimeout(() => {
+        if (debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
           fetchParameters();
-        }, 500);
-        
-        return () => clearTimeout(debounceTimer);
+        }, 1000);
       })
       .subscribe();
     
     subscriptionRef.current = channel;
       
     return () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
       if (subscriptionRef.current) {
         subscriptionRef.current.unsubscribe();
         subscriptionRef.current = null;
@@ -242,19 +275,24 @@ export function usePLCConnection() {
   useEffect(() => {
     if (parameters.length === 0 || connectionStatus !== 'normal') return;
     
-    // For each parameter, periodically save a history entry
-    const historyInterval = setInterval(() => {
-      parameters.forEach(parameter => {
-        saveParameterHistory(parameter);
-      });
-    }, 60000); // Save history every minute instead of on every update
+    // Only periodically save history if we're not connected to a real PLC
+    if (!plcSocketRef.current) {
+      // For each parameter, periodically save a history entry
+      const historyInterval = setInterval(() => {
+        parameters.forEach(parameter => {
+          saveParameterHistory(parameter);
+        });
+      }, 60000); // Save history every minute
+      
+      return () => {
+        clearInterval(historyInterval);
+      };
+    }
     
-    return () => {
-      clearInterval(historyInterval);
-    };
+    return () => {};
   }, [parameters, connectionStatus, saveParameterHistory]);
 
-  // This effect updates parameter values with simulated data when real PLC is not connected
+  // This effect simulates data only when not connected to a real PLC
   useEffect(() => {
     // Clear any existing update interval
     if (updateIntervalRef.current) {
@@ -262,12 +300,15 @@ export function usePLCConnection() {
       updateIntervalRef.current = null;
     }
     
-    // Only simulate data if we're not connected to a real PLC and we have parameters
+    // Only simulate data if we're in 'normal' status but don't have a real PLC connection
+    // and we have parameters to update
     if (connectionStatus === 'normal' && parameters.length > 0 && !plcSocketRef.current) {
+      console.log("Starting parameter simulation mode - connect Ethernet for real PLC data");
+      
       const updateInterval = setInterval(() => {
         setParameters(prev => 
           prev.map(parameter => {
-            const change = (Math.random() - 0.5) * 0.02; // Even smaller change amount
+            const change = (Math.random() - 0.5) * 0.01; // Very small change for stability
             const newValue = parameter.value * (1 + change);
             
             let status: 'normal' | 'warning' | 'alarm' = 'normal';
@@ -292,7 +333,7 @@ export function usePLCConnection() {
             };
           })
         );
-      }, 20000); // Increased interval to 20 seconds for more stability
+      }, 30000); // Update every 30 seconds for simulation
       
       updateIntervalRef.current = updateInterval;
     }
@@ -305,7 +346,7 @@ export function usePLCConnection() {
     };
   }, [connectionStatus, parameters]);
 
-  // Connect to PLC on component mount, but only once
+  // Connect to PLC on component mount
   useEffect(() => {
     fetchParameters();
     
@@ -315,6 +356,11 @@ export function usePLCConnection() {
     
     return () => {
       clearTimeout(initialConnectionTimeout);
+      
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
       
       if (updateIntervalRef.current) {
         clearInterval(updateIntervalRef.current);

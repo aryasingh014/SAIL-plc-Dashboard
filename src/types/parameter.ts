@@ -58,7 +58,15 @@ export interface ParameterHistoryRecord {
   id?: string;
   parameter_id: string;
   value: number;
-  status: string;
+  status: ParameterStatus;
   timestamp: string;
   created_at?: string;
+}
+
+// Add history data entry interface for the history page
+export interface HistoryDataEntry {
+  parameter_id: string;
+  value: number;
+  status: ParameterStatus;
+  timestamp: string;
 }

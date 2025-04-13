@@ -57,7 +57,7 @@ const Settings = () => {
     <DashboardLayout>
       <div className="space-y-4">
         <div>
-          <h1 className="text-xl font-bold">System Settings</h1>
+          <h1 className="text-xl font-bold">SAIL System Settings</h1>
           <p className="text-muted-foreground text-sm">
             Configure the PLC connection, data collection, and user management settings.
           </p>
