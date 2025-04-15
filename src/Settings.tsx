@@ -13,10 +13,10 @@ import { PLCConnectionSettings } from '@/types/parameter';
 const Settings = () => {
   const { profile, loading } = useAuthContext();
   const [plcSettings, setPlcSettings] = useState<PLCConnectionSettings>({
-    ip: '192.168.1.1',
-    port: '502',
+    ip: '',
+    port: '',
     protocol: 'modbus',
-    autoReconnect: true
+    autoReconnect: false
   });
   
   useEffect(() => {
@@ -26,10 +26,10 @@ const Settings = () => {
       try {
         const settings = JSON.parse(savedSettings);
         setPlcSettings({
-          ip: settings.ip || '192.168.1.1',
-          port: settings.port || '502',
+          ip: settings.ip || '',
+          port: settings.port || '',
           protocol: settings.protocol || 'modbus',
-          autoReconnect: settings.autoReconnect !== undefined ? settings.autoReconnect : true
+          autoReconnect: settings.autoReconnect !== undefined ? settings.autoReconnect : false
         });
       } catch (error) {
         console.error('Failed to parse PLC settings:', error);

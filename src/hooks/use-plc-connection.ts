@@ -9,10 +9,10 @@ export function usePLCConnection() {
   const [parameters, setParameters] = useState<Parameter[]>([]);
   const [connectionStatus, setConnectionStatus] = useState<StatusType>('disconnected');
   const [plcSettings, setPlcSettings] = useState<PLCConnectionSettings>({
-    ip: '192.168.1.1',
-    port: '502',
+    ip: '',
+    port: '',
     protocol: 'modbus',
-    autoReconnect: true
+    autoReconnect: false
   });
   
   const connectionAttemptRef = useRef(false);
@@ -20,6 +20,7 @@ export function usePLCConnection() {
   const subscriptionRef = useRef<{ unsubscribe: () => void } | null>(null);
   const plcSocketRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const notificationShownRef = useRef(false);
 
   const fetchParameters = useCallback(async () => {
     try {
@@ -60,6 +61,9 @@ export function usePLCConnection() {
     // Prevent multiple connection attempts
     if (connectionAttemptRef.current) return;
     connectionAttemptRef.current = true;
+    
+    // Reset notification shown flag
+    notificationShownRef.current = false;
     
     // Clear any existing reconnect timeout
     if (reconnectTimeoutRef.current) {
@@ -103,10 +107,12 @@ export function usePLCConnection() {
         if (socket.readyState !== WebSocket.OPEN) {
           socket.close();
           setConnectionStatus('disconnected');
-          toast("Connection Timeout", {
-            description: `Failed to connect to SAIL PLC at ${plcSettings.ip}. Connection timed out.`,
-            variant: "destructive"
-          });
+          if (!notificationShownRef.current) {
+            toast("Connection Timeout", {
+              description: `Failed to connect to SAIL PLC at ${plcSettings.ip}. Connection timed out.`
+            });
+            notificationShownRef.current = true;
+          }
           connectionAttemptRef.current = false;
           
           // Auto reconnect if enabled
@@ -183,10 +189,12 @@ export function usePLCConnection() {
         clearTimeout(connectionTimeout);
         console.error('WebSocket error:', error);
         setConnectionStatus('disconnected');
-        toast("Connection Failed", {
-          description: `Failed to connect to SAIL PLC at ${plcSettings.ip}. Please check connection settings and ensure Ethernet is connected.`,
-          variant: "destructive"
-        });
+        if (!notificationShownRef.current) {
+          toast("Connection Failed", {
+            description: `Failed to connect to SAIL PLC at ${plcSettings.ip}. Please check connection settings and ensure Ethernet is connected.`
+          });
+          notificationShownRef.current = true;
+        }
         connectionAttemptRef.current = false;
         
         // Auto reconnect if enabled
@@ -215,10 +223,12 @@ export function usePLCConnection() {
     } catch (error) {
       console.error('Error establishing WebSocket connection:', error);
       setConnectionStatus('disconnected');
-      toast("Connection Failed", {
-        description: `Failed to connect to SAIL PLC at ${plcSettings.ip}. Please check connection settings and ensure Ethernet is connected.`,
-        variant: "destructive"
-      });
+      if (!notificationShownRef.current) {
+        toast("Connection Failed", {
+          description: `Failed to connect to SAIL PLC at ${plcSettings.ip}. Please check connection settings and ensure Ethernet is connected.`
+        });
+        notificationShownRef.current = true;
+      }
       connectionAttemptRef.current = false;
       
       // Auto reconnect if enabled
