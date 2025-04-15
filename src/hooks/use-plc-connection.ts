@@ -341,17 +341,11 @@ export function usePLCConnection() {
     };
   }, [connectionStatus, parameters]);
 
-  // Connect to PLC on component mount
+  // Initialize by fetching parameters but NOT automatically connecting
   useEffect(() => {
     fetchParameters();
     
-    const initialConnectionTimeout = setTimeout(() => {
-      connectToPLC();
-    }, 1000);
-    
     return () => {
-      clearTimeout(initialConnectionTimeout);
-      
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
         reconnectTimeoutRef.current = null;
@@ -372,7 +366,7 @@ export function usePLCConnection() {
         plcSocketRef.current = null;
       }
     };
-  }, [connectToPLC, fetchParameters]);
+  }, [fetchParameters]);
 
   return {
     parameters,

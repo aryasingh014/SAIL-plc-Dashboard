@@ -1,3 +1,4 @@
+
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from "@/components/ui/button";
@@ -6,20 +7,21 @@ import { useAuthContext } from '@/context/AuthContext';
 
 const Index = () => {
   const navigate = useNavigate();
-  const { isAuthenticated } = useAuthContext();
+  const { isAuthenticated, loading } = useAuthContext();
 
   useEffect(() => {
-    if (isAuthenticated) {
+    // Only redirect after auth state is confirmed loaded
+    if (!loading && isAuthenticated) {
       navigate('/dashboard');
     }
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, navigate, loading]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-900 to-blue-700">
       <Card className="w-[450px] shadow-xl text-center">
         <CardHeader>
           <img
-            src="/SAIL.png" // Replace with your image path
+            src="/SAIL.png"
             alt="SAIL Logo"
             className="mx-auto mb-4 h-20 w-auto"
           />
