@@ -19,15 +19,16 @@ const OfflineIndicator: React.FC = () => {
     };
   }, []);
 
-  if (!isOffline) return null;
-
   return (
     <Badge 
       variant="outline" 
-      className="bg-yellow-100 text-yellow-800 border-yellow-300 flex items-center gap-1 px-2 py-1"
+      className={isOffline ? 
+        "bg-yellow-100 text-yellow-800 border-yellow-300 flex items-center gap-1 px-2 py-1" :
+        "bg-green-100 text-green-800 border-green-300 flex items-center gap-1 px-2 py-1"
+      }
     >
-      <WifiOff size={14} />
-      Offline Mode
+      {isOffline ? <WifiOff size={14} /> : <Wifi size={14} />}
+      {isOffline ? "Offline Mode" : "Online"}
     </Badge>
   );
 };

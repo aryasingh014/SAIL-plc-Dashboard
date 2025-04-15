@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Button } from "@/components/ui/button";
@@ -50,7 +51,11 @@ const Dashboard = () => {
     }, 3000); 
   };
 
+  // Fetch parameters initially and at interval
   useEffect(() => {
+    // Initial fetch
+    fetchParameters();
+    
     const refreshTimer = setInterval(() => {
       if (connectionStatus === 'normal') {
         fetchParameters();
@@ -60,7 +65,10 @@ const Dashboard = () => {
     return () => clearInterval(refreshTimer);
   }, [connectionStatus, fetchParameters]);
 
+  // Listen for Supabase updates
   useEffect(() => {
+    if (!navigator.onLine) return; // Skip if offline
+    
     let timeout: NodeJS.Timeout;
     
     const channel = supabase

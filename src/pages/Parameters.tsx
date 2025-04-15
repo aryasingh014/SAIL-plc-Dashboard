@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Button } from "@/components/ui/button";
@@ -16,6 +17,7 @@ import { toast } from 'sonner';
 import { AlertCircle, AlertTriangle, CheckCircle, Edit, Trash } from 'lucide-react';
 import { ParameterData } from '@/lib/parameters';
 import { ParameterStatus } from '@/types/parameter';
+import OfflineIndicator from '@/components/OfflineIndicator';
 
 const formSchema = z.object({
   name: z.string().min(2, {
@@ -71,7 +73,12 @@ const Parameters = () => {
     setIsLoading(true);
     try {
       const data = await fetchParameters();
-      setParameters(data);
+      // Convert the status string to ParameterStatus type explicitly
+      const typedParameters: ParameterData[] = data.map((param: any) => ({
+        ...param,
+        status: (param.status as ParameterStatus) || 'normal'
+      }));
+      setParameters(typedParameters);
     } catch (error) {
       console.error('Error loading parameters:', error);
       toast("Failed to load parameters");
@@ -173,7 +180,10 @@ const Parameters = () => {
       <div className="space-y-6">
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-bold">Parameters</h1>
-          <Button onClick={() => setIsAddingParameter(true)}>Add Parameter</Button>
+          <div className="flex items-center space-x-2">
+            <OfflineIndicator />
+            <Button onClick={() => setIsAddingParameter(true)}>Add Parameter</Button>
+          </div>
         </div>
 
         <Card>

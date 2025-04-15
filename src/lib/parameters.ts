@@ -1,4 +1,3 @@
-
 import { supabase } from "@/integrations/supabase/client";
 import { Parameter, ParameterHistoryRecord, ParameterStatus } from "@/types/parameter";
 import { toast } from "sonner";
@@ -12,25 +11,52 @@ export interface ParameterData {
   max_value: number | null;
   status?: ParameterStatus;
   user_id?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export async function fetchParameters() {
   try {
-    const { data, error } = await supabase
-      .from('parameters')
-      .select('*')
-      .is('user_id', null)
-      .or('user_id.not.is.null');
-    
-    if (error) {
-      console.error('Error fetching parameters:', error);
-      throw error;
-    }
+    // First try to get from Supabase
+    if (navigator.onLine) {
+      const { data, error } = await supabase
+        .from('parameters')
+        .select('*')
+        .is('user_id', null)
+        .or('user_id.not.is.null');
+      
+      if (error) {
+        console.error('Error fetching parameters:', error);
+        throw error;
+      }
 
-    console.log('Fetched parameters:', data);
-    return data || [];
+      console.log('Fetched parameters from Supabase:', data);
+      
+      // Store in localStorage for offline use
+      if (data && data.length > 0) {
+        localStorage.setItem('cachedParameters', JSON.stringify(data));
+      }
+      
+      return data || [];
+    } else {
+      // If offline, use cached data
+      const cachedData = localStorage.getItem('cachedParameters');
+      if (cachedData) {
+        console.log('Using cached parameters data');
+        return JSON.parse(cachedData);
+      }
+      return [];
+    }
   } catch (error) {
     console.error('Error in fetchParameters:', error);
+    
+    // Try to use cached data on error
+    const cachedData = localStorage.getItem('cachedParameters');
+    if (cachedData) {
+      console.log('Using cached parameters data after error');
+      return JSON.parse(cachedData);
+    }
+    
     return [];
   }
 }
@@ -81,7 +107,9 @@ export async function createParameter(parameter: ParameterData) {
       min_value: parameter.min_value,
       max_value: parameter.max_value,
       status: parameter.status || 'normal',
-      user_id: parameter.user_id
+      user_id: parameter.user_id,
+      created_at: parameter.created_at,
+      updated_at: parameter.updated_at
     };
 
     const { data, error } = await supabase
@@ -191,13 +219,19 @@ export async function addParameterHistoryEntry(record: ParameterHistoryRecord) {
 }
 
 export function convertToParameter(data: any): Parameter {
+  // Ensure status is one of the allowed values
+  let status: ParameterStatus = 'normal';
+  if (data.status === 'warning' || data.status === 'alarm') {
+    status = data.status as ParameterStatus;
+  }
+  
   return {
     id: data.id,
     name: data.name,
     description: `${data.name} parameter`,
     unit: data.unit || '',
     value: data.value,
-    status: (data.status as ParameterStatus) || 'normal',
+    status: status,
     thresholds: {
       warning: {
         min: data.min_value || null,
