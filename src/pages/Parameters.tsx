@@ -1,177 +1,202 @@
-
 import React, { useState, useEffect } from 'react';
+import { useToast } from '@/components/ui/use-toast';
 import DashboardLayout from '@/components/layout/DashboardLayout';
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { z } from "zod";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm } from "react-hook-form";
-import { createParameter, fetchParameters, updateParameter, deleteParameter } from '@/lib/parameters';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Pencil, Trash2, Plus } from 'lucide-react';
 import { useAuthContext } from '@/context/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { AlertCircle, AlertTriangle, CheckCircle, Edit, Trash } from 'lucide-react';
-import { ParameterData } from '@/lib/parameters';
-import { ParameterStatus } from '@/types/parameter';
-import OfflineIndicator from '@/components/OfflineIndicator';
-
-const formSchema = z.object({
-  name: z.string().min(2, {
-    message: "Name must be at least 2 characters.",
-  }),
-  value: z.string().refine((val) => !isNaN(parseFloat(val)), {
-    message: "Value must be a number.",
-  }),
-  unit: z.string().optional(),
-  min: z.string().optional().refine((val) => val === '' || !isNaN(parseFloat(val)), {
-    message: "Min value must be a number.",
-  }),
-  max: z.string().optional().refine((val) => val === '' || !isNaN(parseFloat(val)), {
-    message: "Max value must be a number.",
-  }),
-});
+import { fetchParameters, createParameter, updateParameter, deleteParameter } from '@/lib/parameters';
 
 const Parameters = () => {
-  const [parameters, setParameters] = useState<ParameterData[]>([]);
-  const [isAddingParameter, setIsAddingParameter] = useState(false);
-  const [isEditingParameter, setIsEditingParameter] = useState(false);
-  const [selectedParameter, setSelectedParameter] = useState<ParameterData | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const { toast: uiToast } = useToast();
   const { user } = useAuthContext();
-
-  const form = useForm<z.infer<typeof formSchema>>({
-    resolver: zodResolver(formSchema),
-    defaultValues: {
-      name: "",
-      value: "0",
-      unit: "",
-      min: "",
-      max: "",
-    },
+  const [parameters, setParameters] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [currentParameter, setCurrentParameter] = useState(null);
+  
+  // Form state
+  const [formData, setFormData] = useState({
+    name: '',
+    value: '',
+    unit: '',
+    min_value: '',
+    max_value: '',
+    status: 'normal'
   });
 
-  const editForm = useForm<z.infer<typeof formSchema>>({
-    resolver: zodResolver(formSchema),
-    defaultValues: {
-      name: "",
-      value: "0",
-      unit: "",
-      min: "",
-      max: "",
-    },
-  });
-
+  // Fetch parameters on component mount and set up subscription
   useEffect(() => {
-    loadParameters();
+    getParameters();
+    
+    // Set up real-time subscription
+    const channel = supabase
+      .channel('public:parameters')
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'parameters' 
+      }, (payload) => {
+        console.log('Parameters change detected:', payload);
+        getParameters();
+      })
+      .subscribe();
+      
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
-  const loadParameters = async () => {
-    setIsLoading(true);
+  const getParameters = async () => {
     try {
+      setLoading(true);
       const data = await fetchParameters();
-      // Convert the status string to ParameterStatus type explicitly
-      const typedParameters: ParameterData[] = data.map((param: any) => ({
-        ...param,
-        status: (param.status as ParameterStatus) || 'normal'
-      }));
-      setParameters(typedParameters);
+      setParameters(data || []);
     } catch (error) {
-      console.error('Error loading parameters:', error);
-      toast("Failed to load parameters");
+      console.error('Error in getParameters:', error);
+      uiToast({
+        variant: "destructive",
+        title: "Failed to load parameters",
+        description: error.message,
+      });
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
-  const handleFormSubmit = async (data: { name: string; value: string; unit: string; min: string; max: string }) => {
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setFormData({
+      ...formData,
+      [name]: value
+    });
+  };
+
+  const resetForm = () => {
+    setFormData({
+      name: '',
+      value: '',
+      unit: '',
+      min_value: '',
+      max_value: '',
+      status: 'normal'
+    });
+  };
+
+  const handleAddParameter = async () => {
     try {
-      const minValue = data.min ? parseFloat(data.min) : null;
-      const maxValue = data.max ? parseFloat(data.max) : null;
-      
-      // Fix: ensure status is ParameterStatus type
-      const newParameter = {
-        name: data.name,
-        value: parseFloat(data.value),
-        unit: data.unit,
-        min_value: minValue,
-        max_value: maxValue,
-        status: 'normal' as const, // Fix: Use 'as const' to type as ParameterStatus
-        user_id: user?.id as string
-      };
-      
-      await createParameter(newParameter);
-      await loadParameters();
-      form.reset();
-      setIsAddingParameter(false);
-    } catch (error) {
-      console.error('Error creating parameter:', error);
-    }
-  };
-
-  const handleEditSubmit = async (data: { name: string; value: string; unit: string; min: string; max: string }) => {
-    if (!selectedParameter) return;
-    
-    const minValue = data.min ? parseFloat(data.min) : null;
-    const maxValue = data.max ? parseFloat(data.max) : null;
-    
-    // Fix: ensure status is ParameterStatus type
-    const updatedParameter = {
-      name: data.name,
-      value: parseFloat(data.value),
-      unit: data.unit,
-      min_value: minValue,
-      max_value: maxValue,
-      status: 'normal' as const // Fix: Use 'as const' to type as ParameterStatus
-    };
-    
-    try {
-      await updateParameter(selectedParameter.id!, updatedParameter);
-      await loadParameters();
-      setIsEditingParameter(false);
-    } catch (error) {
-      console.error('Error updating parameter:', error);
-    }
-  };
-
-  const handleDeleteParameter = async (id: string) => {
-    if (confirm('Are you sure you want to delete this parameter? This action cannot be undone.')) {
-      try {
-        await deleteParameter(id);
-        await loadParameters();
-        toast("Parameter deleted successfully");
-      } catch (error) {
-        console.error('Error deleting parameter:', error);
-        toast("Failed to delete parameter");
+      // Validate input
+      if (!formData.name || !formData.value) {
+        uiToast({
+          variant: "destructive",
+          title: "Validation Error",
+          description: "Name and value are required fields",
+        });
+        return;
       }
+
+      const newParameter = {
+        name: formData.name,
+        value: parseFloat(formData.value),
+        unit: formData.unit,
+        min_value: formData.min_value ? parseFloat(formData.min_value) : null,
+        max_value: formData.max_value ? parseFloat(formData.max_value) : null,
+        status: formData.status,
+        user_id: user.id
+      };
+
+      await createParameter(newParameter);
+      
+      // Refresh parameters list
+      getParameters();
+      resetForm();
+      setIsAddDialogOpen(false);
+    } catch (error) {
+      console.error('Error adding parameter:', error);
+      uiToast({
+        variant: "destructive",
+        title: "Failed to add parameter",
+        description: error.message,
+      });
     }
   };
 
-  const handleEditClick = (parameter: ParameterData) => {
-    setSelectedParameter(parameter);
-    editForm.reset({
+  const handleEditClick = (parameter) => {
+    setCurrentParameter(parameter);
+    setFormData({
       name: parameter.name,
       value: parameter.value.toString(),
       unit: parameter.unit || '',
-      min: parameter.min_value !== null ? parameter.min_value.toString() : '',
-      max: parameter.max_value !== null ? parameter.max_value.toString() : '',
+      min_value: parameter.min_value ? parameter.min_value.toString() : '',
+      max_value: parameter.max_value ? parameter.max_value.toString() : '',
+      status: parameter.status || 'normal'
     });
-    setIsEditingParameter(true);
+    setIsEditDialogOpen(true);
   };
 
-  const getStatusIcon = (status: ParameterStatus) => {
-    switch (status) {
-      case 'normal':
-        return <CheckCircle className="h-5 w-5 text-industrial-status-normal" />;
-      case 'warning':
-        return <AlertTriangle className="h-5 w-5 text-industrial-status-warning" />;
-      case 'alarm':
-        return <AlertCircle className="h-5 w-5 text-industrial-status-alarm" />;
-      default:
-        return <CheckCircle className="h-5 w-5 text-industrial-status-normal" />;
+  const handleUpdateParameter = async () => {
+    try {
+      if (!currentParameter) return;
+
+      const updatedParameter = {
+        name: formData.name,
+        value: parseFloat(formData.value),
+        unit: formData.unit,
+        min_value: formData.min_value ? parseFloat(formData.min_value) : null,
+        max_value: formData.max_value ? parseFloat(formData.max_value) : null,
+        status: formData.status
+      };
+
+      await updateParameter(currentParameter.id, updatedParameter);
+
+      getParameters();
+      resetForm();
+      setIsEditDialogOpen(false);
+    } catch (error) {
+      console.error('Error updating parameter:', error);
+      uiToast({
+        variant: "destructive",
+        title: "Failed to update parameter",
+        description: error.message,
+      });
+    }
+  };
+
+  const handleDeleteParameter = async (id, name) => {
+    if (!confirm(`Are you sure you want to delete ${name}?`)) return;
+
+    try {
+      await deleteParameter(id);
+      getParameters();
+    } catch (error) {
+      console.error('Error deleting parameter:', error);
+      uiToast({
+        variant: "destructive",
+        title: "Failed to delete parameter",
+        description: error.message,
+      });
     }
   };
 
@@ -179,24 +204,195 @@ const Parameters = () => {
     <DashboardLayout>
       <div className="space-y-6">
         <div className="flex justify-between items-center">
-          <h1 className="text-2xl font-bold">Parameters</h1>
-          <div className="flex items-center space-x-2">
-            <OfflineIndicator />
-            <Button onClick={() => setIsAddingParameter(true)}>Add Parameter</Button>
+          <div>
+            <h1 className="text-2xl font-bold">PLC Parameters</h1>
+            <p className="text-muted-foreground">
+              View and manage all PLC parameters in the system
+            </p>
           </div>
+          <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="mr-2 h-4 w-4" />
+                Add Parameter
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Add New Parameter</DialogTitle>
+                <DialogDescription>
+                  Create a new PLC parameter to monitor
+                </DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="name" className="text-right">
+                    Name
+                  </Label>
+                  <Input
+                    id="name"
+                    name="name"
+                    placeholder="Temperature"
+                    className="col-span-3"
+                    value={formData.name}
+                    onChange={handleInputChange}
+                  />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="value" className="text-right">
+                    Value
+                  </Label>
+                  <Input
+                    id="value"
+                    name="value"
+                    type="number"
+                    placeholder="25.5"
+                    className="col-span-3"
+                    value={formData.value}
+                    onChange={handleInputChange}
+                  />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="unit" className="text-right">
+                    Unit
+                  </Label>
+                  <Input
+                    id="unit"
+                    name="unit"
+                    placeholder="°C"
+                    className="col-span-3"
+                    value={formData.unit}
+                    onChange={handleInputChange}
+                  />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="min_value" className="text-right">
+                    Min Value
+                  </Label>
+                  <Input
+                    id="min_value"
+                    name="min_value"
+                    type="number"
+                    placeholder="0"
+                    className="col-span-3"
+                    value={formData.min_value}
+                    onChange={handleInputChange}
+                  />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="max_value" className="text-right">
+                    Max Value
+                  </Label>
+                  <Input
+                    id="max_value"
+                    name="max_value"
+                    type="number"
+                    placeholder="100"
+                    className="col-span-3"
+                    value={formData.max_value}
+                    onChange={handleInputChange}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button type="submit" onClick={handleAddParameter}>
+                  Add Parameter
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Edit Parameter</DialogTitle>
+                <DialogDescription>
+                  Update the details of an existing parameter
+                </DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="edit-name" className="text-right">
+                    Name
+                  </Label>
+                  <Input
+                    id="edit-name"
+                    name="name"
+                    className="col-span-3"
+                    value={formData.name}
+                    onChange={handleInputChange}
+                  />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="edit-value" className="text-right">
+                    Value
+                  </Label>
+                  <Input
+                    id="edit-value"
+                    name="value"
+                    type="number"
+                    className="col-span-3"
+                    value={formData.value}
+                    onChange={handleInputChange}
+                  />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="edit-unit" className="text-right">
+                    Unit
+                  </Label>
+                  <Input
+                    id="edit-unit"
+                    name="unit"
+                    className="col-span-3"
+                    value={formData.unit}
+                    onChange={handleInputChange}
+                  />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="edit-min_value" className="text-right">
+                    Min Value
+                  </Label>
+                  <Input
+                    id="edit-min_value"
+                    name="min_value"
+                    type="number"
+                    className="col-span-3"
+                    value={formData.min_value}
+                    onChange={handleInputChange}
+                  />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="edit-max_value" className="text-right">
+                    Max Value
+                  </Label>
+                  <Input
+                    id="edit-max_value"
+                    name="max_value"
+                    type="number" 
+                    className="col-span-3"
+                    value={formData.max_value}
+                    onChange={handleInputChange}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button type="submit" onClick={handleUpdateParameter}>
+                  Update Parameter
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
 
         <Card>
           <CardHeader>
-            <CardTitle>Parameter List</CardTitle>
+            <CardTitle>All Parameters</CardTitle>
           </CardHeader>
           <CardContent>
-            {isLoading ? (
+            {loading ? (
               <div className="text-center py-4">Loading parameters...</div>
             ) : parameters.length === 0 ? (
-              <div className="text-center py-4">
-                <p className="text-muted-foreground">No parameters found. Add your first parameter to get started.</p>
-              </div>
+              <div className="text-center py-4">No parameters found. Add your first parameter to get started.</div>
             ) : (
               <Table>
                 <TableHeader>
@@ -204,8 +400,7 @@ const Parameters = () => {
                     <TableHead>Name</TableHead>
                     <TableHead>Value</TableHead>
                     <TableHead>Unit</TableHead>
-                    <TableHead>Min</TableHead>
-                    <TableHead>Max</TableHead>
+                    <TableHead>Min/Max</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
@@ -215,24 +410,40 @@ const Parameters = () => {
                     <TableRow key={parameter.id}>
                       <TableCell className="font-medium">{parameter.name}</TableCell>
                       <TableCell>{parameter.value}</TableCell>
-                      <TableCell>{parameter.unit || '-'}</TableCell>
-                      <TableCell>{parameter.min_value !== null ? parameter.min_value : '-'}</TableCell>
-                      <TableCell>{parameter.max_value !== null ? parameter.max_value : '-'}</TableCell>
+                      <TableCell>{parameter.unit}</TableCell>
                       <TableCell>
-                        <div className="flex items-center">
-                          {getStatusIcon(parameter.status || 'normal')}
-                          <span className="ml-2 capitalize">{parameter.status || 'normal'}</span>
-                        </div>
+                        {parameter.min_value !== null && parameter.max_value !== null
+                          ? `${parameter.min_value} - ${parameter.max_value}`
+                          : parameter.min_value !== null
+                          ? `Min: ${parameter.min_value}`
+                          : parameter.max_value !== null
+                          ? `Max: ${parameter.max_value}`
+                          : 'Not set'}
+                      </TableCell>
+                      <TableCell>
+                        <span className={`px-2 py-1 rounded text-xs font-medium ${
+                          parameter.status === 'alarm' ? 'bg-red-100 text-red-800' :
+                          parameter.status === 'warning' ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-green-100 text-green-800'
+                        }`}>
+                          {parameter.status || 'normal'}
+                        </span>
                       </TableCell>
                       <TableCell className="text-right">
-                        <div className="flex justify-end space-x-2">
-                          <Button variant="outline" size="icon" onClick={() => handleEditClick(parameter)}>
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button variant="outline" size="icon" onClick={() => handleDeleteParameter(parameter.id!)}>
-                            <Trash className="h-4 w-4" />
-                          </Button>
-                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleEditClick(parameter)}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleDeleteParameter(parameter.id, parameter.name)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -242,178 +453,6 @@ const Parameters = () => {
           </CardContent>
         </Card>
       </div>
-
-      {/* Add Parameter Dialog */}
-      <Dialog open={isAddingParameter} onOpenChange={setIsAddingParameter}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Add Parameter</DialogTitle>
-            <DialogDescription>
-              Add a new parameter to monitor in your dashboard.
-            </DialogDescription>
-          </DialogHeader>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(handleFormSubmit)} className="space-y-4">
-              <FormField
-                control={form.control}
-                name="name"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Name</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Temperature" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="value"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Initial Value</FormLabel>
-                    <FormControl>
-                      <Input type="number" placeholder="0" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="unit"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Unit</FormLabel>
-                    <FormControl>
-                      <Input placeholder="°C" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <div className="grid grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="min"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Min Value (Warning)</FormLabel>
-                      <FormControl>
-                        <Input type="number" placeholder="Optional" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="max"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Max Value (Warning)</FormLabel>
-                      <FormControl>
-                        <Input type="number" placeholder="Optional" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-              <DialogFooter>
-                <Button type="submit">Add Parameter</Button>
-              </DialogFooter>
-            </form>
-          </Form>
-        </DialogContent>
-      </Dialog>
-
-      {/* Edit Parameter Dialog */}
-      <Dialog open={isEditingParameter} onOpenChange={setIsEditingParameter}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Edit Parameter</DialogTitle>
-            <DialogDescription>
-              Update the parameter details.
-            </DialogDescription>
-          </DialogHeader>
-          <Form {...editForm}>
-            <form onSubmit={editForm.handleSubmit(handleEditSubmit)} className="space-y-4">
-              <FormField
-                control={editForm.control}
-                name="name"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Name</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Temperature" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={editForm.control}
-                name="value"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Value</FormLabel>
-                    <FormControl>
-                      <Input type="number" placeholder="0" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={editForm.control}
-                name="unit"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Unit</FormLabel>
-                    <FormControl>
-                      <Input placeholder="°C" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <div className="grid grid-cols-2 gap-4">
-                <FormField
-                  control={editForm.control}
-                  name="min"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Min Value (Warning)</FormLabel>
-                      <FormControl>
-                        <Input type="number" placeholder="Optional" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={editForm.control}
-                  name="max"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Max Value (Warning)</FormLabel>
-                      <FormControl>
-                        <Input type="number" placeholder="Optional" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-              <DialogFooter>
-                <Button type="submit">Update Parameter</Button>
-              </DialogFooter>
-            </form>
-          </Form>
-        </DialogContent>
-      </Dialog>
     </DashboardLayout>
   );
 };

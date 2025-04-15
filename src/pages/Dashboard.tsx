@@ -18,10 +18,12 @@ const Dashboard = () => {
   const systemStatus = useSystemStatus(parameters, connectionStatus);
   const [isRefreshing, setIsRefreshing] = useState(false);
   
+  // Set initial selected parameters when parameters are loaded
   useEffect(() => {
     if (parameters.length > 0 && selectedParameters.length === 0) {
       setSelectedParameters(parameters.slice(0, 4).map(p => p.id));
     } else if (parameters.length > 0) {
+      // Filter out any selected parameters that no longer exist
       setSelectedParameters(prev => 
         prev.filter(id => parameters.some(p => p.id === id))
       );
@@ -45,29 +47,25 @@ const Dashboard = () => {
     setIsRefreshing(true);
     connectToPLC();
     
+    // Reset refresh state after a delay
     setTimeout(() => {
       setIsRefreshing(false);
     }, 3000); 
   };
 
-  // Fetch parameters initially and at interval
+  // Add a refresh effect to update parameters less frequently
   useEffect(() => {
-    // Initial fetch
-    fetchParameters();
-    
     const refreshTimer = setInterval(() => {
       if (connectionStatus === 'normal') {
         fetchParameters();
       }
-    }, 60000);
+    }, 60000); // Refresh every 60 seconds instead of 30 for more stability
     
     return () => clearInterval(refreshTimer);
   }, [connectionStatus, fetchParameters]);
 
-  // Listen for Supabase updates
+  // Subscribe to real-time parameter changes with debounce
   useEffect(() => {
-    if (!navigator.onLine) return; // Skip if offline
-    
     let timeout: NodeJS.Timeout;
     
     const channel = supabase
@@ -77,6 +75,7 @@ const Dashboard = () => {
         schema: 'public',
         table: 'parameters'
       }, () => {
+        // Debounce multiple rapid updates
         clearTimeout(timeout);
         timeout = setTimeout(() => {
           fetchParameters();

@@ -48,24 +48,6 @@ export type Database = {
         }
         Relationships: []
       }
-      plc_data: {
-        Row: {
-          id: number
-          inserted_at: string | null
-          value: number | null
-        }
-        Insert: {
-          id?: number
-          inserted_at?: string | null
-          value?: number | null
-        }
-        Update: {
-          id?: number
-          inserted_at?: string | null
-          value?: number | null
-        }
-        Relationships: []
-      }
       profiles: {
         Row: {
           created_at: string | null

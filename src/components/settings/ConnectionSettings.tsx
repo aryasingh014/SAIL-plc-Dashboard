@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -65,7 +64,8 @@ const ConnectionSettings: React.FC<ConnectionSettingsProps> = ({ initialSettings
       } else {
         setTestStatus('error');
         toast("Connection Failed", {
-          description: "Could not connect to PLC. Please check your settings and try again."
+          description: "Could not connect to PLC. Please check your settings and try again.",
+          variant: "destructive"
         });
       }
       
