@@ -1,8 +1,8 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Button } from "@/components/ui/button";
 import StatusIndicator from '@/components/StatusIndicator';
+import OfflineIndicator from '@/components/OfflineIndicator';
 import { mockAlerts } from '@/data/mockData';
 import { RefreshCw } from 'lucide-react';
 import DashboardStatsCards from '@/components/dashboard/DashboardStatsCards';
@@ -18,12 +18,10 @@ const Dashboard = () => {
   const systemStatus = useSystemStatus(parameters, connectionStatus);
   const [isRefreshing, setIsRefreshing] = useState(false);
   
-  // Set initial selected parameters when parameters are loaded
   useEffect(() => {
     if (parameters.length > 0 && selectedParameters.length === 0) {
       setSelectedParameters(parameters.slice(0, 4).map(p => p.id));
     } else if (parameters.length > 0) {
-      // Filter out any selected parameters that no longer exist
       setSelectedParameters(prev => 
         prev.filter(id => parameters.some(p => p.id === id))
       );
@@ -47,24 +45,21 @@ const Dashboard = () => {
     setIsRefreshing(true);
     connectToPLC();
     
-    // Reset refresh state after a delay
     setTimeout(() => {
       setIsRefreshing(false);
     }, 3000); 
   };
 
-  // Add a refresh effect to update parameters less frequently
   useEffect(() => {
     const refreshTimer = setInterval(() => {
       if (connectionStatus === 'normal') {
         fetchParameters();
       }
-    }, 60000); // Refresh every 60 seconds instead of 30 for more stability
+    }, 60000);
     
     return () => clearInterval(refreshTimer);
   }, [connectionStatus, fetchParameters]);
 
-  // Subscribe to real-time parameter changes with debounce
   useEffect(() => {
     let timeout: NodeJS.Timeout;
     
@@ -75,7 +70,6 @@ const Dashboard = () => {
         schema: 'public',
         table: 'parameters'
       }, () => {
-        // Debounce multiple rapid updates
         clearTimeout(timeout);
         timeout = setTimeout(() => {
           fetchParameters();
@@ -95,6 +89,7 @@ const Dashboard = () => {
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-bold">Dashboard</h1>
           <div className="flex items-center space-x-2">
+            <OfflineIndicator />
             <StatusIndicator 
               status={systemStatus} 
               label={`System Status: ${systemStatus.charAt(0).toUpperCase() + systemStatus.slice(1)}`}
