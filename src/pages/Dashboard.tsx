@@ -3,7 +3,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Button } from "@/components/ui/button";
 import StatusIndicator from '@/components/StatusIndicator';
-import OfflineIndicator from '@/components/OfflineIndicator';
 import { mockAlerts } from '@/data/mockData';
 import { RefreshCw } from 'lucide-react';
 import DashboardStatsCards from '@/components/dashboard/DashboardStatsCards';
@@ -97,7 +96,6 @@ const Dashboard = () => {
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-bold">Dashboard</h1>
           <div className="flex items-center space-x-2">
-            <OfflineIndicator />
             <StatusIndicator 
               status={systemStatus} 
               label={`System Status: ${systemStatus.charAt(0).toUpperCase() + systemStatus.slice(1)}`}
