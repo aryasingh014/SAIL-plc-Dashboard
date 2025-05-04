@@ -1,4 +1,3 @@
-
 import { supabase } from "@/integrations/supabase/client";
 import { Parameter, ParameterHistoryRecord, ParameterStatus } from "@/types/parameter";
 import { toast } from "sonner";

@@ -142,6 +142,107 @@ export const mockParameters: Parameter[] = [
     },
     timestamp: new Date().toISOString(),
     category: 'Level'
+  },
+  // New SAIL Demo Parameters
+  {
+    id: 'motor-001',
+    name: 'Motor Speed',
+    description: 'Main drive motor speed',
+    unit: 'RPM',
+    value: 1750,
+    status: 'normal',
+    thresholds: {
+      warning: {
+        min: 1600,
+        max: 1800
+      },
+      alarm: {
+        min: 1500,
+        max: 1850
+      }
+    },
+    timestamp: new Date().toISOString(),
+    category: 'Motor'
+  },
+  {
+    id: 'torque-001',
+    name: 'Drive Torque',
+    description: 'Main drive torque output',
+    unit: 'Nm',
+    value: 85.4,
+    status: 'normal',
+    thresholds: {
+      warning: {
+        min: 70,
+        max: 90
+      },
+      alarm: {
+        min: 60,
+        max: 95
+      }
+    },
+    timestamp: new Date().toISOString(),
+    category: 'Motor'
+  },
+  {
+    id: 'vibration-001',
+    name: 'Vibration Sensor',
+    description: 'Machine vibration level',
+    unit: 'mm/s',
+    value: 3.2,
+    status: 'warning',
+    thresholds: {
+      warning: {
+        min: 2.5,
+        max: 4.0
+      },
+      alarm: {
+        min: 0,
+        max: 5.0
+      }
+    },
+    timestamp: new Date().toISOString(),
+    category: 'Mechanical'
+  },
+  {
+    id: 'humidity-001',
+    name: 'Ambient Humidity',
+    description: 'Control cabinet humidity',
+    unit: '%RH',
+    value: 45.7,
+    status: 'normal',
+    thresholds: {
+      warning: {
+        min: 30,
+        max: 70
+      },
+      alarm: {
+        min: 20,
+        max: 80
+      }
+    },
+    timestamp: new Date().toISOString(),
+    category: 'Environmental'
+  },
+  {
+    id: 'temp-002',
+    name: 'Ambient Temperature',
+    description: 'Control cabinet temperature',
+    unit: '°C',
+    value: 24.3,
+    status: 'normal',
+    thresholds: {
+      warning: {
+        min: 15,
+        max: 35
+      },
+      alarm: {
+        min: 10,
+        max: 40
+      }
+    },
+    timestamp: new Date().toISOString(),
+    category: 'Environmental'
   }
 ];
 

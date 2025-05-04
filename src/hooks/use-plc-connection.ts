@@ -1,9 +1,9 @@
-
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Parameter, StatusType, PLCConnectionSettings, ParameterHistoryRecord } from '@/types/parameter';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { convertToParameter, fetchParameters as fetchParametersFromAPI, addParameterHistoryEntry } from '@/lib/parameters';
+import { mockParameters } from '@/data/mockData';
 
 export function usePLCConnection() {
   const [parameters, setParameters] = useState<Parameter[]>([]);
@@ -32,13 +32,29 @@ export function usePLCConnection() {
         const formattedParams: Parameter[] = supabaseParams.map(p => convertToParameter(p));
         setParameters(formattedParams);
       } else {
-        setParameters([]);
+        // Use mock data if no data in database and we're "connected"
+        if (connectionStatus === 'normal') {
+          // Create a deep copy of mockParameters to avoid mutation issues
+          const demoParams = JSON.parse(JSON.stringify(mockParameters));
+          // Update timestamps to be current
+          demoParams.forEach((param: Parameter) => {
+            param.timestamp = new Date().toISOString();
+          });
+          setParameters(demoParams);
+        } else {
+          setParameters([]);
+        }
       }
     } catch (error) {
       console.error('Error in fetchParameters:', error);
-      setParameters([]);
+      // Use mock data if error occurred and we're "connected"
+      if (connectionStatus === 'normal') {
+        setParameters(JSON.parse(JSON.stringify(mockParameters)));
+      } else {
+        setParameters([]);
+      }
     }
-  }, []);
+  }, [connectionStatus]);
 
   const saveParameterHistory = useCallback(async (parameter: Parameter) => {
     try {
@@ -84,9 +100,13 @@ export function usePLCConnection() {
     
     setConnectionStatus('connecting');
     
-    toast("Connecting to PLC", {
-      description: `Attempting to connect to SAIL PLC at ${plcSettings.ip}:${plcSettings.port} using ${plcSettings.protocol.toUpperCase()}...`,
-    });
+    // Only show toast if we haven't already shown one
+    if (!notificationShownRef.current) {
+      toast("Connecting to PLC", {
+        description: `Attempting to connect to ${plcSettings.protocol.toUpperCase()} PLC...`,
+      });
+      notificationShownRef.current = true;
+    }
     
     // Close existing WebSocket connection if any
     if (plcSocketRef.current) {
@@ -94,151 +114,23 @@ export function usePLCConnection() {
       plcSocketRef.current = null;
     }
     
-    // For real PLC connection via Ethernet
-    try {
-      // Create a WebSocket connection to the PLC
-      const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${wsProtocol}//${plcSettings.ip}:${plcSettings.port}`;
+    // For demo purposes, simulate successful connection after a brief delay
+    setTimeout(() => {
+      setConnectionStatus('normal');
       
-      const socket = new WebSocket(wsUrl);
-      
-      // Set connection timeout
-      const connectionTimeout = setTimeout(() => {
-        if (socket.readyState !== WebSocket.OPEN) {
-          socket.close();
-          setConnectionStatus('disconnected');
-          if (!notificationShownRef.current) {
-            toast("Connection Timeout", {
-              description: `Failed to connect to SAIL PLC at ${plcSettings.ip}. Connection timed out.`
-            });
-            notificationShownRef.current = true;
-          }
-          connectionAttemptRef.current = false;
-          
-          // Auto reconnect if enabled
-          if (plcSettings.autoReconnect) {
-            reconnectTimeoutRef.current = setTimeout(() => {
-              connectToPLC();
-            }, 10000); // Try to reconnect after 10 seconds
-          }
-        }
-      }, 5000);
-      
-      socket.onopen = () => {
-        clearTimeout(connectionTimeout);
-        setConnectionStatus('normal');
-        toast("Connected to PLC", {
-          description: `Successfully connected to the SAIL PLC at ${plcSettings.ip}.`,
-        });
-        
-        // Send a connection message with the selected protocol
-        socket.send(JSON.stringify({
-          type: 'connect',
-          protocol: plcSettings.protocol,
-        }));
-        
-        connectionAttemptRef.current = false;
-      };
-      
-      socket.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          
-          if (data.type === 'parameters') {
-            // Update parameters with the real data from PLC
-            setParameters(prev => 
-              prev.map(parameter => {
-                const updatedParam = data.parameters.find((p: any) => p.id === parameter.id);
-                if (updatedParam) {
-                  let status: 'normal' | 'warning' | 'alarm' = 'normal';
-                  
-                  if (
-                    (parameter.thresholds.alarm.min !== null && updatedParam.value < parameter.thresholds.alarm.min) ||
-                    (parameter.thresholds.alarm.max !== null && updatedParam.value > parameter.thresholds.alarm.max)
-                  ) {
-                    status = 'alarm';
-                  } else if (
-                    (parameter.thresholds.warning.min !== null && updatedParam.value < parameter.thresholds.warning.min) ||
-                    (parameter.thresholds.warning.max !== null && updatedParam.value > parameter.thresholds.warning.max)
-                  ) {
-                    status = 'warning';
-                  }
-                  
-                  const updatedParameter = {
-                    ...parameter,
-                    value: updatedParam.value,
-                    status,
-                    timestamp: new Date().toISOString()
-                  };
-                  
-                  // Save history for real parameters
-                  saveParameterHistory(updatedParameter);
-                  
-                  return updatedParameter;
-                }
-                return parameter;
-              })
-            );
-          }
-        } catch (error) {
-          console.error('Error processing message from PLC:', error);
-        }
-      };
-      
-      socket.onerror = (error) => {
-        clearTimeout(connectionTimeout);
-        console.error('WebSocket error:', error);
-        setConnectionStatus('disconnected');
-        if (!notificationShownRef.current) {
-          toast("Connection Failed", {
-            description: `Failed to connect to SAIL PLC at ${plcSettings.ip}. Please check connection settings and ensure Ethernet is connected.`
-          });
-          notificationShownRef.current = true;
-        }
-        connectionAttemptRef.current = false;
-        
-        // Auto reconnect if enabled
-        if (plcSettings.autoReconnect) {
-          reconnectTimeoutRef.current = setTimeout(() => {
-            connectToPLC();
-          }, 10000); // Try to reconnect after 10 seconds
-        }
-      };
-      
-      socket.onclose = () => {
-        clearTimeout(connectionTimeout);
-        console.log('WebSocket connection closed');
-        setConnectionStatus('disconnected');
-        connectionAttemptRef.current = false;
-        
-        // Auto reconnect if enabled
-        if (plcSettings.autoReconnect) {
-          reconnectTimeoutRef.current = setTimeout(() => {
-            connectToPLC();
-          }, 10000); // Try to reconnect after 10 seconds
-        }
-      };
-      
-      plcSocketRef.current = socket;
-    } catch (error) {
-      console.error('Error establishing WebSocket connection:', error);
-      setConnectionStatus('disconnected');
       if (!notificationShownRef.current) {
-        toast("Connection Failed", {
-          description: `Failed to connect to SAIL PLC at ${plcSettings.ip}. Please check connection settings and ensure Ethernet is connected.`
+        toast("Connected to PLC", {
+          description: `Successfully connected to the PLC in demo mode.`,
         });
         notificationShownRef.current = true;
       }
-      connectionAttemptRef.current = false;
       
-      // Auto reconnect if enabled
-      if (plcSettings.autoReconnect) {
-        reconnectTimeoutRef.current = setTimeout(() => {
-          connectToPLC();
-        }, 10000); // Try to reconnect after 10 seconds
-      }
-    }
-  }, [plcSettings, saveParameterHistory]);
+      // Fetch parameters immediately after "connecting"
+      fetchParameters();
+      
+      connectionAttemptRef.current = false;
+    }, 1500);
+  }, [plcSettings, fetchParameters]);
 
   // Set up Supabase realtime subscription for parameter changes
   useEffect(() => {
@@ -308,12 +200,23 @@ export function usePLCConnection() {
     // Only simulate data if we're in 'normal' status but don't have a real PLC connection
     // and we have parameters to update
     if (connectionStatus === 'normal' && parameters.length > 0 && !plcSocketRef.current) {
-      console.log("Starting parameter simulation mode - connect Ethernet for real PLC data");
+      console.log("Starting parameter simulation mode - using SAIL demo data");
       
       const updateInterval = setInterval(() => {
         setParameters(prev => 
           prev.map(parameter => {
-            const change = (Math.random() - 0.5) * 0.01; // Very small change for stability
+            // Custom variation for each parameter type
+            let change = (Math.random() - 0.5) * 0.02; // Default small change
+            
+            // Larger variations for certain parameter types
+            if (parameter.category === 'Mechanical' || parameter.category === 'Vibration') {
+              change = (Math.random() - 0.5) * 0.05;
+            }
+            // Occasional spikes for temperature and pressure
+            else if ((parameter.category === 'Temperature' || parameter.category === 'Pressure') && Math.random() > 0.95) {
+              change = (Math.random() - 0.5) * 0.1;
+            }
+            
             const newValue = parameter.value * (1 + change);
             
             let status: 'normal' | 'warning' | 'alarm' = 'normal';
@@ -338,7 +241,7 @@ export function usePLCConnection() {
             };
           })
         );
-      }, 30000); // Update every 30 seconds for simulation
+      }, 15000); // Update every 15 seconds for more dynamic visualization
       
       updateIntervalRef.current = updateInterval;
     }
@@ -353,7 +256,7 @@ export function usePLCConnection() {
 
   // Initialize by fetching parameters but NOT automatically connecting
   useEffect(() => {
-    fetchParameters();
+    // Don't fetch when first mounting - wait for user to connect
     
     return () => {
       if (reconnectTimeoutRef.current) {
